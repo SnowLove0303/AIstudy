@@ -4,7 +4,7 @@ AIstudy is a Windows desktop learning system built with Electron, React, TypeScr
 
 ## Version
 
-Current source version: `1.0.0`
+Current source version: `1.0.14`
 
 ## Features
 

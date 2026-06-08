@@ -74,8 +74,21 @@ type OutlineItem = {
   id: string;
   topic: string;
   depth: number;
+  parentId: string;
 };
-type CourseWorkspaceMode = "knowledge" | "mindmap";
+type NoteEntry = {
+  id: string;
+  topic: string;
+  depth: number;
+  parentId: string;
+  path: Array<{ id: string; topic: string; depth: number }>;
+  note: string;
+  tags: string[];
+  childTopics: string[];
+  isLeaf: boolean;
+  order: number;
+};
+type CourseWorkspaceMode = "knowledge" | "notes" | "mindmap";
 type AppSettings = {
   mindMapArrowPan: boolean;
 };
@@ -190,15 +203,52 @@ function renderMindMapText(value: string) {
 
 function buildOutline(data: MindElixirData): OutlineItem[] {
   const items: OutlineItem[] = [];
-  const walk = (nodes: NodeObj[] | undefined, depth: number) => {
+  const walk = (nodes: NodeObj[] | undefined, depth: number, parentId: string) => {
     nodes?.forEach((node) => {
-      items.push({ id: node.id, topic: node.topic, depth });
-      walk(node.children, depth + 1);
+      items.push({ id: node.id, topic: node.topic, depth, parentId });
+      walk(node.children, depth + 1, node.id);
     });
   };
 
-  walk(data.nodeData.children, 0);
+  walk(data.nodeData.children, 0, data.nodeData.id);
   return items;
+}
+
+function normalizeTag(tag: NonNullable<NodeObj["tags"]>[number]) {
+  return typeof tag === "string" ? tag : tag.text;
+}
+
+function buildNoteEntries(data: MindElixirData): NoteEntry[] {
+  const entries: NoteEntry[] = [];
+  let order = 1;
+  const walk = (
+    nodes: NodeObj[] | undefined,
+    depth: number,
+    parentId: string,
+    parentPath: Array<{ id: string; topic: string; depth: number }>
+  ) => {
+    nodes?.forEach((node) => {
+      const path = [...parentPath, { id: node.id, topic: node.topic, depth }];
+      const childTopics = (node.children ?? []).map((child) => child.topic);
+      entries.push({
+        id: node.id,
+        topic: node.topic,
+        depth,
+        parentId,
+        path,
+        note: node.note ?? "",
+        tags: (node.tags ?? []).map(normalizeTag).filter(Boolean),
+        childTopics,
+        isLeaf: childTopics.length === 0,
+        order
+      });
+      order += 1;
+      walk(node.children, depth + 1, node.id, path);
+    });
+  };
+
+  walk(data.nodeData.children, 0, data.nodeData.id, []);
+  return entries;
 }
 
 function App() {
@@ -719,7 +769,6 @@ function CourseDetail({
         </button>
         <div>
           <span className="course-category">{course.category || "未分类"}</span>
-          <h2>{course.title}</h2>
         </div>
         <button className="secondary-button">
           <Save size={18} />
@@ -735,6 +784,9 @@ function CourseDetail({
           <div className="workspace-switch" aria-label="课程功能切换">
             <button className={workspaceMode === "knowledge" ? "active" : ""} onClick={() => setWorkspaceMode("knowledge")}>
               知识点
+            </button>
+            <button className={workspaceMode === "notes" ? "active" : ""} onClick={() => setWorkspaceMode("notes")}>
+              知识笔记
             </button>
             <button className={workspaceMode === "mindmap" ? "active" : ""} onClick={() => setWorkspaceMode("mindmap")}>
               思维导图
@@ -776,15 +828,22 @@ function MindMapEditor({
   settings: AppSettings;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const outlineListRef = useRef<HTMLDivElement | null>(null);
   const mindRef = useRef<MindElixirInstance | null>(null);
   const canvasDragRef = useRef({ active: false, x: 0, y: 0 });
   const panControlRef = useRef({ x: panControlCenter, y: panControlCenter });
   const [outline, setOutline] = useState<OutlineItem[]>(() => buildOutline(data));
+  const [noteEntries, setNoteEntries] = useState<NoteEntry[]>(() => buildNoteEntries(data));
   const [compactMode, setCompactMode] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedPageId, setSelectedPageId] = useState(data.nodeData.id);
   const [selectedNodeCount, setSelectedNodeCount] = useState(1);
   const [toolHint, setToolHint] = useState("");
   const [dragMode, setDragMode] = useState(false);
+  const [expandedEdit, setExpandedEdit] = useState(false);
+  const [draggingOutlineId, setDraggingOutlineId] = useState<string | null>(null);
+  const [outlineDropTargetId, setOutlineDropTargetId] = useState<string | null>(null);
+  const [outlineScroll, setOutlineScroll] = useState(0);
   const [panControl, setPanControl] = useState({ x: panControlCenter, y: panControlCenter });
   const [shouldMountMindMap, setShouldMountMindMap] = useState(mode === "mindmap");
 
@@ -799,6 +858,12 @@ function MindMapEditor({
       setShouldMountMindMap(true);
     }
   }, [mode]);
+
+  useEffect(() => {
+    setSelectedPageId(data.nodeData.id);
+    setSelectedNodeId(data.nodeData.id);
+    setSelectedNodeCount(1);
+  }, [courseId, data.nodeData.id]);
 
   useEffect(() => {
     if (!shouldMountMindMap) return;
@@ -819,16 +884,20 @@ function MindMapEditor({
 
     mind.init(data || createMindMap(title));
     mindRef.current = mind;
-    setOutline(buildOutline(mind.getData()));
-    setSelectedNodeId(mind.nodeData.children?.[0]?.id ?? mind.nodeData.id);
+    const initialData = mind.getData();
+    setOutline(buildOutline(initialData));
+    setNoteEntries(buildNoteEntries(initialData));
+    setSelectedNodeId(mind.nodeData.id);
 
     mind.bus.addListener("operation", () => {
       const nextData = mind.getData();
       setOutline(buildOutline(nextData));
+      setNoteEntries(buildNoteEntries(nextData));
       onChangeRef.current(nextData);
     });
     mind.bus.addListener("selectNodes", (nodes) => {
-      setSelectedNodeId(nodes[0]?.id ?? null);
+      const nextSelectedId = nodes[0]?.id ?? null;
+      setSelectedNodeId(nextSelectedId);
       setSelectedNodeCount(nodes.length || 0);
       if (nodes.length >= 2) setToolHint("");
     });
@@ -840,24 +909,117 @@ function MindMapEditor({
     };
   }, [courseId, title, shouldMountMindMap]);
 
+  const focusMindNode = (id: string) => {
+    const mind = mindRef.current;
+    if (!mind) return;
+    if ((mind as MindElixirInstance & { isFocusMode?: boolean }).isFocusMode) {
+      mind.cancelFocus();
+    }
+    requestAnimationFrame(() => {
+      const topic = mind.findEle(id);
+      if (!topic) return;
+      mind.selectNode(topic);
+      mind.focusNode(topic);
+      mind.scrollIntoView(topic, true);
+    });
+  };
+
   const focusOutlineNode = (id: string) => {
     setSelectedNodeId(id);
+    setSelectedPageId(id);
+    setSelectedNodeCount(1);
+    focusMindNode(id);
+  };
+
+  const focusRootMindMap = () => {
+    const rootNodeId = mindRef.current?.nodeData.id ?? data.nodeData.id;
+    setSelectedPageId(rootNodeId);
+    setSelectedNodeId(rootNodeId);
     setSelectedNodeCount(1);
     const mind = mindRef.current;
     if (!mind) return;
-    const topic = mind.findEle(id);
-    if (!topic) return;
-    mind.selectNode(topic);
-    mind.focusNode(topic);
-    mind.scrollIntoView(topic, true);
+    if ((mind as MindElixirInstance & { isFocusMode?: boolean }).isFocusMode) {
+      mind.cancelFocus();
+    }
+    const rootNode = mind.findEle(rootNodeId);
+    if (rootNode) {
+      mind.selectNode(rootNode);
+      mind.scrollIntoView(rootNode, true);
+    }
+    mind.toCenter();
+    const nextData = mind.getData();
+    setOutline(buildOutline(nextData));
+    setNoteEntries(buildNoteEntries(nextData));
   };
+
+  useEffect(() => {
+    if (mode !== "mindmap") return;
+    if (!shouldMountMindMap) return;
+    if (selectedPageId === (mindRef.current?.nodeData.id ?? data.nodeData.id)) {
+      focusRootMindMap();
+      return;
+    }
+    focusMindNode(selectedPageId);
+  }, [mode, shouldMountMindMap, selectedPageId]);
 
   const syncMindData = () => {
     const mind = mindRef.current;
     if (!mind) return;
     const nextData = mind.getData();
     setOutline(buildOutline(nextData));
+    setNoteEntries(buildNoteEntries(nextData));
     onChangeRef.current(nextData);
+  };
+
+  const findNodeSiblings = (root: NodeObj, targetId: string): { siblings: NodeObj[]; index: number; parentId: string } | null => {
+    const walk = (node: NodeObj): { siblings: NodeObj[]; index: number; parentId: string } | null => {
+      const children = node.children ?? [];
+      const index = children.findIndex((child) => child.id === targetId);
+      if (index >= 0) {
+        return { siblings: children, index, parentId: node.id };
+      }
+      for (const child of children) {
+        const match = walk(child);
+        if (match) return match;
+      }
+      return null;
+    };
+
+    return walk(root);
+  };
+
+  const reorderOutlineNode = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    const mind = mindRef.current;
+    if (!mind) return;
+    if ((mind as MindElixirInstance & { isFocusMode?: boolean }).isFocusMode) {
+      setToolHint("请先回到主思维导图后再调整章节顺序");
+      return;
+    }
+
+    const nextData = JSON.parse(JSON.stringify(mind.getData())) as MindElixirData;
+    const source = findNodeSiblings(nextData.nodeData, draggedId);
+    const target = findNodeSiblings(nextData.nodeData, targetId);
+    if (!source || !target) return;
+    if (source.parentId !== target.parentId) {
+      setToolHint("只支持同级章节上下排序");
+      return;
+    }
+
+    const [draggedNode] = source.siblings.splice(source.index, 1);
+    const targetIndex = source.index < target.index ? target.index - 1 : target.index;
+    source.siblings.splice(targetIndex, 0, draggedNode);
+    mind.refresh(nextData);
+    setOutline(buildOutline(nextData));
+    setNoteEntries(buildNoteEntries(nextData));
+    setSelectedNodeId(draggedId);
+    setSelectedNodeCount(1);
+    setToolHint("章节顺序已同步");
+    onChangeRef.current(nextData);
+    requestAnimationFrame(() => {
+      const node = mind.findEle(draggedId);
+      if (node) mind.selectNode(node);
+    });
   };
 
   const getActiveNode = () => {
@@ -1061,12 +1223,41 @@ function MindMapEditor({
     }
   };
 
-  const isRootSelected = selectedNodeId === data.nodeData.id;
+  const updateOutlineScroll = () => {
+    const list = outlineListRef.current;
+    if (!list) return;
+    const maxScroll = Math.max(list.scrollHeight - list.clientHeight, 1);
+    setOutlineScroll(Math.round((list.scrollTop / maxScroll) * 1000));
+  };
+
+  const slideOutlineTo = (value: number) => {
+    const list = outlineListRef.current;
+    if (!list) return;
+    const maxScroll = Math.max(list.scrollHeight - list.clientHeight, 0);
+    if (maxScroll === 0) {
+      list.scrollTop = 0;
+      setOutlineScroll(0);
+      return;
+    }
+    list.scrollTop = (maxScroll * value) / 1000;
+    setOutlineScroll(value);
+  };
+
+  const scrollOutlineBy = (distance: number) => {
+    const list = outlineListRef.current;
+    if (!list) return;
+    list.scrollBy({ top: distance, behavior: "smooth" });
+    window.setTimeout(updateOutlineScroll, 180);
+  };
+
+  const rootNodeId = mindRef.current?.nodeData.id ?? data.nodeData.id;
+  const activePageId = selectedPageId ?? rootNodeId;
+  const activeEditNodeId = selectedNodeId ?? activePageId;
+  const isRootSelected = activeEditNodeId === rootNodeId;
   const canUseMultiNodeTool = selectedNodeCount >= 2;
-  const activeNodeId = selectedNodeId ?? data.nodeData.id;
-  const activeOutlineItem = outline.find((item) => item.id === activeNodeId);
+  const activeOutlineItem = outline.find((item) => item.id === activePageId);
   const activeTopic = activeOutlineItem?.topic ?? title;
-  const activeKnowledge = knowledgePoints[activeNodeId] ?? "";
+  const activeKnowledge = knowledgePoints[activePageId] ?? "";
 
   return (
     <div className="mindmap-editor-layout">
@@ -1076,17 +1267,72 @@ function MindMapEditor({
           <span>{outline.length}</span>
         </div>
         {outline.length > 0 ? (
-          <div className="outline-list">
+          <div className="outline-scroll-area">
+          <div className="outline-list" onScroll={updateOutlineScroll} ref={outlineListRef}>
+            <button
+              className={activePageId === rootNodeId ? "outline-item root active" : "outline-item root"}
+              onClick={focusRootMindMap}
+            >
+              主思维导图
+            </button>
             {outline.map((item) => (
               <button
-                className="outline-item"
+                className={[
+                  "outline-item",
+                  activePageId === item.id ? "active" : "",
+                  draggingOutlineId === item.id ? "dragging" : "",
+                  outlineDropTargetId === item.id ? "drop-target" : ""
+                ].filter(Boolean).join(" ")}
+                draggable
                 key={item.id}
+                onDragEnd={() => {
+                  setDraggingOutlineId(null);
+                  setOutlineDropTargetId(null);
+                }}
+                onDragEnter={() => {
+                  if (draggingOutlineId && draggingOutlineId !== item.id) {
+                    setOutlineDropTargetId(item.id);
+                  }
+                }}
+                onDragOver={(event) => {
+                  if (!draggingOutlineId || draggingOutlineId === item.id) return;
+                  event.preventDefault();
+                }}
+                onDragStart={(event) => {
+                  setDraggingOutlineId(item.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", item.id);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedId = event.dataTransfer.getData("text/plain") || draggingOutlineId;
+                  setDraggingOutlineId(null);
+                  setOutlineDropTargetId(null);
+                  if (draggedId) reorderOutlineNode(draggedId, item.id);
+                }}
                 onClick={() => focusOutlineNode(item.id)}
                 style={{ paddingLeft: `${12 + item.depth * 14}px` }}
               >
                 {item.topic}
               </button>
             ))}
+          </div>
+          <div className="outline-scroll-control" aria-label="目录上下滑动">
+            <button type="button" title="向上滑动目录" onClick={() => scrollOutlineBy(-128)}>
+              <ChevronUp size={15} />
+            </button>
+            <input
+              aria-label="目录上下滑动"
+              max={1000}
+              min={0}
+              onChange={(event) => slideOutlineTo(Number(event.target.value))}
+              type="range"
+              value={outlineScroll}
+            />
+            <button type="button" title="向下滑动目录" onClick={() => scrollOutlineBy(128)}>
+              <ChevronDown size={15} />
+            </button>
+          </div>
           </div>
         ) : (
           <div className="outline-empty">暂无分支</div>
@@ -1095,7 +1341,7 @@ function MindMapEditor({
       <div className="mindmap-stage">
         {mode === "knowledge" && (
           <KnowledgePanel
-            nodeId={activeNodeId}
+            nodeId={activePageId}
             topic={activeTopic}
             value={activeKnowledge}
             knowledgePoints={knowledgePoints}
@@ -1103,8 +1349,19 @@ function MindMapEditor({
           />
         )}
 
+        {mode === "notes" && (
+          <KnowledgeNotesPanel activeNodeId={activePageId} entries={noteEntries} rootNodeId={rootNodeId} title={title} />
+        )}
+
         {shouldMountMindMap && (
-          <div className={mode === "mindmap" ? "mindmap-mode-panel active" : "mindmap-mode-panel"} aria-hidden={mode !== "mindmap"}>
+          <div
+            className={[
+              "mindmap-mode-panel",
+              mode === "mindmap" ? "active" : "",
+              expandedEdit ? "expanded-edit" : ""
+            ].filter(Boolean).join(" ")}
+            aria-hidden={mode !== "mindmap"}
+          >
           <div className="mindmap-format-bar" aria-label="导图排版工具">
             <div className="tool-row primary-tools">
               <div className="tool-group">
@@ -1185,6 +1442,20 @@ function MindMapEditor({
                 <button title="居中显示" onClick={() => mindRef.current?.toCenter()}>
                   <LocateFixed size={16} />
                   <span>居中</span>
+                </button>
+                <button
+                  className={expandedEdit ? "active" : ""}
+                  title={expandedEdit ? "退出放大编辑" : "放大编辑"}
+                  onClick={() => {
+                    setExpandedEdit((current) => !current);
+                    requestAnimationFrame(() => {
+                      mindRef.current?.scaleFit();
+                      mindRef.current?.toCenter();
+                    });
+                  }}
+                >
+                  <Maximize2 size={16} />
+                  <span>{expandedEdit ? "退出" : "放大编辑"}</span>
                 </button>
                 <button
                   className={dragMode ? "active" : ""}
@@ -1400,6 +1671,172 @@ function KnowledgePanel({
         }}
         placeholder="定义、重点、例子、易错点..."
       />
+    </section>
+  );
+}
+
+function KnowledgeNotesPanel({
+  activeNodeId,
+  entries,
+  rootNodeId,
+  title
+}: {
+  activeNodeId: string;
+  entries: NoteEntry[];
+  rootNodeId: string;
+  title: string;
+}) {
+  const scopedEntries = useMemo(() => {
+    if (activeNodeId === rootNodeId) return entries;
+    return entries.filter((entry) => entry.id === activeNodeId || entry.path.some((pathItem) => pathItem.id === activeNodeId));
+  }, [activeNodeId, entries, rootNodeId]);
+  const leafPages = useMemo(() => {
+    const leaves = scopedEntries.filter((entry) => entry.isLeaf);
+    return leaves.length > 0 ? leaves : scopedEntries.slice(0, 1);
+  }, [scopedEntries]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const currentPageIndex = Math.min(pageIndex, Math.max(leafPages.length - 1, 0));
+  const currentPage = leafPages[currentPageIndex];
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [activeNodeId, leafPages.length]);
+
+  return (
+    <section className="knowledge-notes-panel" aria-label="知识笔记">
+      <header className="knowledge-notes-header">
+        <div>
+          <span>知识笔记</span>
+          <h3>{title}</h3>
+        </div>
+        <small>{leafPages.length > 0 ? `${currentPageIndex + 1} / ${leafPages.length}` : "0 / 0"}</small>
+      </header>
+
+      <div className="knowledge-notes-list">
+        {currentPage ? (
+          <>
+            <div className="note-page-controls">
+              <button type="button" disabled={currentPageIndex === 0} onClick={() => setPageIndex((index) => Math.max(index - 1, 0))}>
+                <ChevronLeft size={16} />
+                上一页
+              </button>
+              <strong>{currentPage.topic}</strong>
+              <button
+                type="button"
+                disabled={currentPageIndex >= leafPages.length - 1}
+                onClick={() => setPageIndex((index) => Math.min(index + 1, leafPages.length - 1))}
+              >
+                下一页
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            <article className="knowledge-note-block note-page" key={currentPage.id}>
+              <div className="note-path">
+                {currentPage.path.map((pathItem, index) => (
+                  <div
+                    className={index === currentPage.path.length - 1 ? "note-path-title current" : "note-path-title"}
+                    key={pathItem.id}
+                    style={{ "--note-depth": pathItem.depth } as React.CSSProperties}
+                  >
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <h4>{pathItem.topic}</h4>
+                  </div>
+                ))}
+              </div>
+
+              <div className="note-fixed-body">
+                <section>
+                  <strong>复习内容</strong>
+                  <p>{currentPage.note || "待补充"}</p>
+                </section>
+
+                <section>
+                  <strong>分支位置</strong>
+                  <p>{currentPage.path.map((pathItem) => pathItem.topic).join(" / ")}</p>
+                </section>
+
+                {currentPage.tags.length > 0 && (
+                  <section>
+                    <strong>标签</strong>
+                    <div className="note-tags">
+                      {currentPage.tags.map((tag) => (
+                        <span key={tag}>{tag}</span>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            </article>
+          </>
+        ) : (
+          <div className="outline-empty">暂无分支</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LegacyKnowledgeNotesPanel({ title, entries }: { title: string; entries: NoteEntry[] }) {
+  return (
+    <section className="knowledge-notes-panel" aria-label="知识笔记">
+      <header className="knowledge-notes-header">
+        <div>
+          <span>知识笔记</span>
+          <h3>{title}</h3>
+        </div>
+        <small>{entries.length} 个标题</small>
+      </header>
+
+      <div className="knowledge-notes-list">
+        {entries.length > 0 ? (
+          entries.map((entry) => (
+            <article
+              className="knowledge-note-block"
+              key={entry.id}
+              style={{ "--note-depth": entry.depth } as React.CSSProperties}
+            >
+              <div className="note-title-row">
+                <span>{String(entry.order).padStart(2, "0")}</span>
+                <h4>{entry.topic}</h4>
+              </div>
+
+              <div className="note-fixed-body">
+                <section>
+                  <strong>复习内容</strong>
+                  <p>{entry.note || "待补充"}</p>
+                </section>
+
+                <section>
+                  <strong>分支结构</strong>
+                  {entry.childTopics.length > 0 ? (
+                    <ul>
+                      {entry.childTopics.map((topic) => (
+                        <li key={topic}>{topic}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>无下级分支</p>
+                  )}
+                </section>
+
+                {entry.tags.length > 0 && (
+                  <section>
+                    <strong>标签</strong>
+                    <div className="note-tags">
+                      {entry.tags.map((tag) => (
+                        <span key={tag}>{tag}</span>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="outline-empty">暂无分支</div>
+        )}
+      </div>
     </section>
   );
 }

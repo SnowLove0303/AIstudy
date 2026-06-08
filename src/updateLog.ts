@@ -9,6 +9,118 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.0.14",
+    date: "2026-06-09",
+    title: "交接同步",
+    featureUpdates: ["补充系统交接说明并同步仓库版本"],
+    fixes: ["统一源码版本与交接记录"],
+    optimizations: ["交接信息覆盖功能、架构、位置和发布路径"]
+  },
+  {
+    version: "1.0.13",
+    date: "2026-06-08",
+    title: "功能区规整",
+    featureUpdates: ["思维导图功能区改为统一标题与按钮排列"],
+    fixes: ["减少功能区视觉错位"],
+    optimizations: ["工具组高度和按钮宽度更一致"]
+  },
+  {
+    version: "1.0.12",
+    date: "2026-06-08",
+    title: "控件固定",
+    featureUpdates: ["思维导图滑动控件固定在可视编辑区"],
+    fixes: ["修复导图内容过高时底部滑动栏不可见"],
+    optimizations: ["放大编辑状态下控件位置独立适配"]
+  },
+  {
+    version: "1.0.11",
+    date: "2026-06-08",
+    title: "放大编辑",
+    featureUpdates: ["思维导图新增放大编辑按钮"],
+    fixes: ["恢复画布底部左右滑动栏显示"],
+    optimizations: ["放大编辑时画布可视空间更大"]
+  },
+  {
+    version: "1.0.10",
+    date: "2026-06-08",
+    title: "目录滑动",
+    featureUpdates: ["课程目录新增上下滑动栏"],
+    fixes: ["目录较长时可直接拖动定位"],
+    optimizations: ["目录滚动控制更清晰"]
+  },
+  {
+    version: "1.0.9",
+    date: "2026-06-08",
+    title: "功能区排版",
+    featureUpdates: ["思维导图功能区改为规整分组布局"],
+    fixes: ["减少功能区分组错位和拥挤"],
+    optimizations: ["工具按钮间距和分组边界更统一"]
+  },
+  {
+    version: "1.0.8",
+    date: "2026-06-08",
+    title: "详情标题",
+    featureUpdates: ["课程详情操作栏移除重复课程标题"],
+    fixes: ["减少页面顶部重复信息"],
+    optimizations: ["课程详情头部空间更紧凑"]
+  },
+  {
+    version: "1.0.7",
+    date: "2026-06-08",
+    title: "工具栏布局",
+    featureUpdates: ["思维导图工具栏改为上下分组展示"],
+    fixes: ["减少工具栏横向拖动操作"],
+    optimizations: ["工具分组在窄屏下自动换行"]
+  },
+  {
+    version: "1.0.6",
+    date: "2026-06-08",
+    title: "导图编辑分页",
+    featureUpdates: ["思维导图编辑节点不再自动切换目录页"],
+    fixes: ["修复章节内新增分支后跳入子分支页"],
+    optimizations: ["目录分页和节点编辑选中状态分离"]
+  },
+  {
+    version: "1.0.5",
+    date: "2026-06-08",
+    title: "目录分页",
+    featureUpdates: ["知识笔记按目录切换叶子分支页", "思维导图按目录进入对应分支"],
+    fixes: ["修复目录点击后章节切换不生效"],
+    optimizations: ["知识笔记页展示当前分支路径"]
+  },
+  {
+    version: "1.0.4",
+    date: "2026-06-08",
+    title: "知识笔记",
+    featureUpdates: ["课程工作区新增知识笔记功能", "知识笔记按思维导图分支生成固定格式"],
+    fixes: ["导图分支内容可用于快速复习整理"],
+    optimizations: ["笔记标题按分支层级阶梯式排列"]
+  },
+  {
+    version: "1.0.3",
+    date: "2026-06-08",
+    title: "目录拖拽排序",
+    featureUpdates: ["目录支持同级章节拖拽调整顺序"],
+    fixes: ["章节顺序调整后同步刷新思维导图"],
+    optimizations: ["目录拖拽状态更清晰"]
+  },
+  {
+    version: "1.0.2",
+    date: "2026-06-08",
+    title: "目录回到主图",
+    featureUpdates: ["目录新增主思维导图入口"],
+    fixes: ["进入章节后可一键回到课程主导图"],
+    optimizations: ["目录选中状态更清晰"]
+  },
+  {
+    version: "1.0.1",
+    date: "2026-06-08",
+    title: "导图空间优化",
+    featureUpdates: ["课程思维导图显示区域扩大"],
+    fixes: ["压缩课程详情和工作区顶部功能区高度"],
+    optimizations: ["导图工具栏改为更紧凑排版"]
+  },
+  {
     version: "1.0.0",
     date: "2026-06-08",
     title: "首个交接版本",
