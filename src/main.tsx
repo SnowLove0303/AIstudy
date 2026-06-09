@@ -1187,6 +1187,42 @@ function MindMapEditor({
     return () => window.removeEventListener("keydown", handleArrowPan);
   }, [mode, settings.mindMapArrowPan]);
 
+  // 快捷键删除分支
+  useEffect(() => {
+    if (mode !== "mindmap") return;
+
+    const handleDeleteBranch = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTextInput =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
+      // 在文本输入框内不处理（允许正常删除字符）
+      if (isTextInput) return;
+
+      // Delete 或 Backspace 键删除分支
+      if (event.key === "Delete" || event.key === "Backspace") {
+        const mind = mindRef.current;
+        if (!mind) return;
+
+        const node = getActiveNode();
+        if (!node) return;
+
+        // 不能删除根节点
+        if (node.nodeObj.id === mind.nodeData.id) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        mind.removeNodes([node]);
+        syncMindData();
+      }
+    };
+
+    window.addEventListener("keydown", handleDeleteBranch, true);
+    return () => window.removeEventListener("keydown", handleDeleteBranch, true);
+  }, [mode]);
+
   const startCanvasDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!dragMode) return;
     if (event.button !== 0) return;

@@ -1,6 +1,6 @@
 {
   "name": "aistudy",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "AIstudy desktop learning system shell.",
   "author": "SnowLove0303",
   "private": true,
@@ -41,7 +41,15 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "assets/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "public",
+        "to": "public",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
       "icon": "assets/icon.ico",

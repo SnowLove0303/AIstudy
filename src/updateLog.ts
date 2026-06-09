@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.0.15",
+    date: "2026-06-09",
+    title: "快捷键删除分支",
+    featureUpdates: ["思维导图支持 Delete/Backspace 快捷键删除选中分支"],
+    fixes: ["输入文本时不会误触发分支删除"],
+    optimizations: ["删除分支操作更便捷，无需点击工具栏按钮"]
+  },
+  {
     version: "1.0.14",
     date: "2026-06-09",
     title: "交接同步",
