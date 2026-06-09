@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.0.16",
+    date: "2026-06-09",
+    title: "系统索引",
+    featureUpdates: ["补充全系统程序、数据、构建和交接索引"],
+    fixes: ["统一交接资料中的版本和位置说明"],
+    optimizations: ["索引覆盖源码、exe、存储、发布产物和后续开发重点"]
+  },
+  {
     version: "1.0.15",
     date: "2026-06-09",
     title: "快捷键删除分支",
