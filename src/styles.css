@@ -588,7 +588,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 8px 22px;
   border-bottom: 1px solid var(--line);
   background: rgba(248, 250, 252, 0.84);
   flex-wrap: wrap;
