@@ -590,7 +590,7 @@ h1 {
   gap: 6px;
   padding: 8px 22px;
   border-bottom: 1px solid var(--line);
-  background: rgba(248, 250, 252, 0.84);
+  background: transparent;
   flex-wrap: wrap;
   max-width: 100%;
   box-sizing: border-box;
