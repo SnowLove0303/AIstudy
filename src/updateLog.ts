@@ -9,6 +9,830 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.147",
+    date: "2026-06-14",
+    title: "ChatGPT 回复提取修复",
+    featureUpdates: ["ChatGPT 问答继续复用已登录 Chrome 页面"],
+    fixes: ["修复 ChatGPT 已回答但聊天窗只显示空标签的问题"],
+    optimizations: ["按最后一条用户消息后的回答块读取内容，减少推荐问题和输入提示干扰"]
+  },
+  {
+    version: "1.2.146",
+    date: "2026-06-14",
+    title: "ChatGPT 直连清理",
+    featureUpdates: ["ChatGPT 选项统一使用已登录 Chrome 端口直连"],
+    fixes: ["移除界面和主进程中旧的本机桥接提示，避免继续要求启动脚本"],
+    optimizations: ["端口管理仅显示 Chrome 登录窗口状态，和 Doubao 的使用方式保持一致"]
+  },
+  {
+    version: "1.2.145",
+    date: "2026-06-14",
+    title: "ChatGPT 旧桥接兜底",
+    featureUpdates: ["ChatGPT 问答残留入口统一改为已登录 Chrome 端口直连"],
+    fixes: ["修复旧入口仍提示需要启动 8000 本机桥接的问题"],
+    optimizations: ["ChatGPT 所有问答路径都复用 9230 CDP 会话，减少端口混用"]
+  },
+  {
+    version: "1.2.144",
+    date: "2026-06-14",
+    title: "ChatGPT 已登录端口直连",
+    featureUpdates: ["AI 聊天的 ChatGPT 选项改为复用当前已登录 Chrome 9230 端口"],
+    fixes: ["修复 ChatGPT 误走 8000 本机桥接或临时浏览器导致登录态、端口和回复不一致的问题"],
+    optimizations: ["ChatGPT 问答改用与 Doubao 一致的 CDP 后台发送和回复读取流程"]
+  },
+  {
+    version: "1.2.143",
+    date: "2026-06-14",
+    title: "ChatGPT 桥接连续问答修复",
+    featureUpdates: ["ChatGPT 网页桥接继续按 Notion 方案使用本机 8000 接口"],
+    fixes: ["修复连续第二次请求时 ChatGPT 输入框被浮层遮挡导致桥接返回失败的问题"],
+    optimizations: ["输入框聚焦增加强制点击和页面焦点兜底，提升网页桥接稳定性"]
+  },
+  {
+    version: "1.2.142",
+    date: "2026-06-14",
+    title: "ChatGPT 默认 Chrome 登录",
+    featureUpdates: ["ChatGPT 登录窗口默认改为复用系统 Chrome 登录态"],
+    fixes: ["修复登录入口误用豆包端口或临时 Chrome 窗口的问题"],
+    optimizations: ["仅在显式配置 ChatGPT 登录端口时才走 CDP 端口，否则直接使用当前默认 Chrome"]
+  },
+  {
+    version: "1.2.141",
+    date: "2026-06-14",
+    title: "ChatGPT 本机 Chrome 端口复用",
+    featureUpdates: ["ChatGPT 登录窗口优先复用本机 Chrome 端口打开，支持通过环境变量切换端口"],
+    fixes: ["修复 ChatGPT 登录入口反复拉起临时浏览器并卡在 Google 验证窗口的问题"],
+    optimizations: ["打开登录页时不再暂停本机桥接服务，减少端口状态和登录窗口互相干扰"]
+  },
+  {
+    version: "1.2.140",
+    date: "2026-06-14",
+    title: "ChatGPT 登录直启",
+    featureUpdates: ["ChatGPT 端口管理登录按钮改为直接打开网页登录浏览器"],
+    fixes: ["修复通过 PowerShell 间接启动时网页登录窗口可能没有出现的问题"],
+    optimizations: ["登录窗口直接复用 CatGPT 本机 Python 环境和浏览器登录态目录"]
+  },
+  {
+    version: "1.2.139",
+    date: "2026-06-14",
+    title: "ChatGPT 登录窗口修复",
+    featureUpdates: ["ChatGPT 端口管理登录窗口改为可见并保持打开"],
+    fixes: ["修复从 AIstudy 点击 ChatGPT 打开登录窗口后无反应的问题"],
+    optimizations: ["打开登录窗口前自动暂停 ChatGPT 桥接，避免登录态目录被占用"]
+  },
+  {
+    version: "1.2.138",
+    date: "2026-06-14",
+    title: "ChatGPT 端口管理",
+    featureUpdates: ["信息搜集端口管理新增 ChatGPT 桥接卡片"],
+    fixes: ["ChatGPT 登录态目录和 8000 本机接口状态可在端口管理中查看"],
+    optimizations: ["ChatGPT 支持在端口管理中启动桥接服务和打开登录窗口"]
+  },
+  {
+    version: "1.2.137",
+    date: "2026-06-14",
+    title: "Doubao 回复对齐修复",
+    featureUpdates: ["Doubao 问答按本次新增助手回复回填到聊天窗口"],
+    fixes: ["修复短回复或用户问题回声被误判为上一轮结果的问题"],
+    optimizations: ["等待新增助手回复稳定后再返回，减少回复内容错位"]
+  },
+  {
+    version: "1.2.136",
+    date: "2026-06-14",
+    title: "ChatGPT 聊天选项",
+    featureUpdates: ["知识点 AI 聊天新增 ChatGPT 选项，可切换到本机 ChatGPT 浏览器桥接回答"],
+    fixes: ["补齐 AI 聊天模型选择中的 ChatGPT 通道提示与错误反馈"],
+    optimizations: ["ChatGPT 回答复用现有问答与编辑解析流程，保持聊天窗口展示一致"]
+  },
+  {
+    version: "1.2.135",
+    date: "2026-06-14",
+    title: "Doubao 功能区边界",
+    featureUpdates: ["Doubao 问答按页面功能区结构区分回复和推荐问题"],
+    fixes: ["修复个性化推荐问题被当作正式回复返回的问题"],
+    optimizations: ["优先读取助手消息功能区之前的正文，功能区之后内容不再参与回复提取"]
+  },
+  {
+    version: "1.2.134",
+    date: "2026-06-14",
+    title: "Doubao 新增回复提取",
+    featureUpdates: ["Doubao 问答改为只解析本次发送后新增的回复内容"],
+    fixes: ["修复历史消息、重复短文本和推荐追问混入当前回复的问题"],
+    optimizations: ["发送前记录页面文本边界，发送后按新增尾部内容提取助手回答"]
+  },
+  {
+    version: "1.2.133",
+    date: "2026-06-14",
+    title: "Doubao 重复问答边界",
+    featureUpdates: ["Doubao 问答在问题和回答文字相同时仍能提取正确回复"],
+    fixes: ["修复用户输入与豆包回答相同导致回复边界落到答案后方的问题"],
+    optimizations: ["完整提示词边界优先于用户文本边界，减少推荐追问误入回复"]
+  },
+  {
+    version: "1.2.132",
+    date: "2026-06-14",
+    title: "ChatGPT 浏览器桥接方案",
+    featureUpdates: ["新增 ChatGPT 浏览器桥接的本机启动脚本和嵌入说明"],
+    fixes: ["明确无 Docker 运行时改用源码可运行的浏览器桥接方案"],
+    optimizations: ["记录本地接口、模型名、登录态目录和 AI 聊天接入位置"]
+  },
+  {
+    version: "1.2.131",
+    date: "2026-06-14",
+    title: "Doubao 后台问答",
+    featureUpdates: ["Doubao 问答发起后尽量保持 Chrome 在后台运行"],
+    fixes: ["移除发起问答时强制把豆包 Chrome 拉到桌面前台的逻辑"],
+    optimizations: ["继续通过 CDP 后台发送问题和读取回复，减少对当前操作窗口的打断"]
+  },
+  {
+    version: "1.2.130",
+    date: "2026-06-14",
+    title: "Doubao 问题定位修复",
+    featureUpdates: ["Doubao 问答按用户原文定位本次回复"],
+    fixes: ["修复从提示词解析问题失败导致仍误取推荐追问的问题"],
+    optimizations: ["用户问题单独传入抓取脚本，减少中文分隔符和页面文本差异影响"]
+  },
+  {
+    version: "1.2.129",
+    date: "2026-06-14",
+    title: "Doubao 短回复提取",
+    featureUpdates: ["Doubao 问答支持正确显示重复出现的短回复"],
+    fixes: ["修复相同短回复被旧消息去重吞掉后误显示推荐追问的问题"],
+    optimizations: ["回复提取改为截取本次提问后的正文，遇到免责声明和推荐追问自动停止"]
+  },
+  {
+    version: "1.2.128",
+    date: "2026-06-14",
+    title: "Doubao 推荐追问过滤",
+    featureUpdates: ["Doubao 问答优先展示正式回答内容"],
+    fixes: ["修复豆包推荐追问覆盖实际回复的问题"],
+    optimizations: ["按回答特征对页面候选内容排序，短问句追问不再作为最终回复"]
+  },
+  {
+    version: "1.2.127",
+    date: "2026-06-13",
+    title: "Doubao 回复净化",
+    featureUpdates: ["知识点 AI 聊天的 Doubao 回复只展示豆包实际回答"],
+    fixes: ["修复程序侧回复夹带提示词、课程信息和推荐追问的问题"],
+    optimizations: ["缩短 Doubao 回复稳定等待时间，优先读取最新助手消息"]
+  },
+  {
+    version: "1.2.126",
+    date: "2026-06-13",
+    title: "Doubao 问答接入",
+    featureUpdates: ["知识点 AI 聊天新增 Doubao 选项，可复用端口管理中的豆包登录态进行问答"],
+    fixes: ["豆包仅作为问答工具返回结果，不触发知识点自动写回"],
+    optimizations: ["端口管理新增 Doubao 9224 登录窗口，AI 聊天通过本地 CDP 会话发送问题并等待完整回复"]
+  },
+  {
+    version: "1.2.125",
+    date: "2026-06-13",
+    title: "Claude 内容沙箱",
+    featureUpdates: ["Claude Code 改为使用独立内容沙箱，内容草稿统一写入沙箱 outbox"],
+    fixes: ["移除项目代码锁的密码依赖，避免内容编写流程被密码状态阻断"],
+    optimizations: ["Claude 项目权限限制源码、构建产物和发布包写入，filesystem MCP 仅暴露内容沙箱目录"]
+  },
+  {
+    version: "1.2.124",
+    date: "2026-06-13",
+    title: "项目代码锁",
+    featureUpdates: ["项目新增本地代码锁，可用密码保护源码和程序配置文件"],
+    fixes: ["降低外部 AI 会话误改项目程序文件的风险"],
+    optimizations: ["课程内容数据和运行产物保持可写，便于继续让 AI 辅助编写知识内容"]
+  },
+  {
+    version: "1.2.123",
+    date: "2026-06-13",
+    title: "导图底部留白修复",
+    featureUpdates: ["思维导图初始画布继续保持根节点居中显示"],
+    fixes: ["修复新建小导图底部出现额外空白、横向拖动条落在画布外的问题"],
+    optimizations: ["画布拖动控制条改为贴合导图区域内部定位，目录和画布高度跟随页面剩余空间"]
+  },
+  {
+    version: "1.2.122",
+    date: "2026-06-13",
+    title: "AI日报任务管理",
+    featureUpdates: ["AI日报生成设置新增知乎文章来源，可输入指定知乎链接生成日报", "AI日报页新增自动任务管理，可按渠道和执行时间管理转录任务"],
+    fixes: ["压缩最近日报信息卡高度，减少结果区域首屏占用"],
+    optimizations: ["自动任务支持启停和删除，日报信息根据 Bilibili 或知乎来源展示对应字段"]
+  },
+  {
+    version: "1.2.121",
+    date: "2026-06-13",
+    title: "初始导图高度",
+    featureUpdates: ["新建课程和需求的初始导图会按完整工作区高度展示"],
+    fixes: ["修复小导图首次打开时节点停在顶部、目录和画布视觉高度不一致的问题"],
+    optimizations: ["进入导图根视图时自动适配并居中，保持目录区域与画布区域等高"]
+  },
+  {
+    version: "1.2.120",
+    date: "2026-06-13",
+    title: "新建导图修复",
+    featureUpdates: ["新建课程和需求文档会自动生成首个目录分支"],
+    fixes: ["修复新建后知识笔记、需求笔记和导图页面显示暂无分支的问题"],
+    optimizations: ["旧的空导图数据打开时会自动补齐默认分支，目录和导图使用同一份节点数据"]
+  },
+  {
+    version: "1.2.119",
+    date: "2026-06-13",
+    title: "创建入口修复",
+    featureUpdates: ["课程库和开发平台的创建入口恢复创建后直接进入编辑页"],
+    fixes: ["修复数据库异步加载可能覆盖刚创建课程或需求的问题"],
+    optimizations: ["补充创建回归验证，覆盖课程库和开发平台两套独立存储"]
+  },
+  {
+    version: "1.2.118",
+    date: "2026-06-13",
+    title: "平台底层索引",
+    featureUpdates: ["课程库和开发平台改为通过同一套平台索引驱动"],
+    fixes: ["收拢两套重复的数据加载、保存和页面状态逻辑，仅保留数据库来源差异"],
+    optimizations: ["后续修改导图、目录、正文编辑等共用功能时，可在同一套底层代码中维护"]
+  },
+  {
+    version: "1.2.117",
+    date: "2026-06-13",
+    title: "开发平台入口",
+    featureUpdates: ["侧边导航新增开发平台，用于创建和编写需求文档"],
+    fixes: ["开发平台数据接入独立存储，不与课程库数据混用"],
+    optimizations: ["复用课程库的导图、目录和正文编辑能力，并切换为需求文档文案"]
+  },
+  {
+    version: "1.2.116",
+    date: "2026-06-13",
+    title: "AI日报信息折叠",
+    featureUpdates: ["AI日报结果改为单个信息卡展示基本信息和内容摘要"],
+    fixes: ["移除默认展示的内容分段和整理状态框，减少页面纵向占用"],
+    optimizations: ["重点内容收进详情折叠区，日报结果首屏更紧凑"]
+  },
+  {
+    version: "1.2.115",
+    date: "2026-06-13",
+    title: "知识点滚动保持",
+    featureUpdates: ["知识点 Word 工具栏排版操作会保持当前阅读位置"],
+    fixes: ["修复修改前文格式后视图自动跳到后文段落的问题"],
+    optimizations: ["格式命令、字距和格式刷操作统一保护编辑区滚动位置"]
+  },
+  {
+    version: "1.2.114",
+    date: "2026-06-13",
+    title: "AI日报折叠呈现",
+    featureUpdates: ["AI日报结果改为基本信息、中文摘要、重点整理、内容分段的折叠式展示"],
+    fixes: ["修正日报内容硬截断、半角标点、繁体字和常见转录误识别导致的阅读问题"],
+    optimizations: ["日报产物新增结构化摘要、清洗后转录和整理状态，长文本排版更适合阅读"]
+  },
+  {
+    version: "1.2.113",
+    date: "2026-06-13",
+    title: "复用式格式刷",
+    featureUpdates: ["知识点 Word 工具栏新增独立复用式格式刷按钮"],
+    fixes: ["普通格式刷保持单次应用，复用式格式刷可连续应用到多个选区"],
+    optimizations: ["复用式按钮使用独立角标，Esc 或关闭按钮可退出连续刷格式状态"]
+  },
+  {
+    version: "1.2.112",
+    date: "2026-06-13",
+    title: "AI日报生成面板",
+    featureUpdates: ["AI日报页面新增视频日报生成面板，可填写 BV 号并启动生成"],
+    fixes: ["打包资源新增脚本外置副本，确保桌面版也能调用 AI日报工作流"],
+    optimizations: ["最近日报会显示标题、重点、分段数，并可直接打开 Markdown 或 HTML 产物"]
+  },
+  {
+    version: "1.2.111",
+    date: "2026-06-13",
+    title: "知识点格式刷",
+    featureUpdates: ["知识点 Word 工具栏新增格式刷按钮，支持复制并应用选区格式"],
+    fixes: ["补齐 Canvas 知识点编辑器缺少格式刷入口的问题"],
+    optimizations: ["格式刷支持单次应用、双击连续应用和 Esc 退出"]
+  },
+  {
+    version: "1.2.110",
+    date: "2026-06-13",
+    title: "系统说明同步",
+    featureUpdates: ["README 同步到当前信息搜集、端口管理、AI日报和知识点 Word 内核状态"],
+    fixes: ["补齐新增脚本、调试工具、Electron IPC 和本机存储路径说明"],
+    optimizations: ["系统说明按功能模块、数据存储、验证流程和排障入口重新整理"]
+  },
+  {
+    version: "1.2.109",
+    date: "2026-06-13",
+    title: "AI日报自动化工作流",
+    featureUpdates: ["新增 Bilibili 视频到 AI日报的自动化脚本入口"],
+    fixes: ["工作流产物按运行目录保存，避免下载、转录和日报文件混在一起"],
+    optimizations: ["日报生成同时输出 Markdown、HTML 和 manifest，便于后续页面接入"]
+  },
+  {
+    version: "1.2.108",
+    date: "2026-06-13",
+    title: "AI日报入口",
+    featureUpdates: ["信息搜集顶部导航新增 AI日报 板块入口"],
+    fixes: ["AI日报切换后保持独立空白页面，不影响端口管理内容"],
+    optimizations: ["信息搜集顶部导航支持多板块切换，便于后续接入日报功能"]
+  },
+  {
+    version: "1.2.107",
+    date: "2026-06-13",
+    title: "端口管理登录窗口",
+    featureUpdates: ["信息搜集的端口管理新增 Bilibili 与知乎登录窗口入口"],
+    fixes: ["端口状态由 Electron 后端检测，避免页面误判登录端口是否可用"],
+    optimizations: ["两个平台使用独立 Chrome profile 和固定 CDP 端口，减少登录态互相影响"]
+  },
+  {
+    version: "1.2.106",
+    date: "2026-06-13",
+    title: "信息搜集顶部导航",
+    featureUpdates: ["信息搜集页面新增顶部导航栏，并加入端口管理板块"],
+    fixes: ["端口管理内容区保持空白，避免提前展示未接入功能"],
+    optimizations: ["顶部导航使用独立横向样式，便于后续扩展更多信息搜集板块"]
+  },
+  {
+    version: "1.2.105",
+    date: "2026-06-13",
+    title: "信息搜集入口",
+    featureUpdates: ["侧边导航新增信息搜集入口"],
+    fixes: ["新增页面保持空白状态，便于后续接入信息搜集功能"],
+    optimizations: ["信息搜集入口放置在更新管理下方，保持导航分组清晰"]
+  },
+  {
+    version: "1.2.104",
+    date: "2026-06-13",
+    title: "知识点间距字号细化",
+    featureUpdates: ["知识点字间距、段间距和字号下拉项增加更细档位"],
+    fixes: ["补充紧凑字距、小字号和大字号选项，减少正文调节跨度过大的问题"],
+    optimizations: ["字距与段距选项显示具体数值，便于连续微调排版"]
+  },
+  {
+    version: "1.2.103",
+    date: "2026-06-13",
+    title: "知识点排版选区修复",
+    featureUpdates: ["知识点排版工具会复用编辑器最后一次有效选区"],
+    fixes: ["修复点击工具栏后加粗、颜色、字号、对齐等命令因选区丢失而失效的问题"],
+    optimizations: ["工具按钮点击不再抢走正文焦点，下拉类排版命令执行前会恢复选区"]
+  },
+  {
+    version: "1.2.102",
+    date: "2026-06-13",
+    title: "知识点间距调节",
+    featureUpdates: ["知识点工具栏新增字间距和段间距调节"],
+    fixes: ["恢复横向文档默认段距，减少正文被拉得过散的问题"],
+    optimizations: ["旧版知识点文档首次打开时自动归正过大的间距和拉伸对齐"]
+  },
+  {
+    version: "1.2.101",
+    date: "2026-06-13",
+    title: "知识点横向连续页",
+    featureUpdates: ["知识点文档改为横向连续编辑视图"],
+    fixes: ["取消纵向分页造成的单页幻灯片观感，正文可持续向下延展"],
+    optimizations: ["旧知识点内容迁移到横向宽版时使用更宽的换行宽度"]
+  },
+  {
+    version: "1.2.100",
+    date: "2026-06-13",
+    title: "知识点 Word 内核嵌入",
+    featureUpdates: ["知识点库嵌入类 Word 文档编辑器，支持分页、字体、字号、颜色、列表、表格、分页和打印"],
+    fixes: ["替换旧正文编辑内核，降低加粗、字号和颜色等排版命令互相污染的概率"],
+    optimizations: ["知识点同时保存文档结构和兼容 HTML，并可从工具栏插入当前思维导图分支"]
+  },
+  {
+    version: "1.2.99",
+    date: "2026-06-13",
+    title: "知识点文字样式开关",
+    featureUpdates: ["知识点字体颜色新增常用色按钮组，点击即可应用到选中文本"],
+    fixes: ["斜体、下划线和删除线统一支持再次点击取消，表现与加粗一致"],
+    optimizations: ["文字样式写入优先复用现有内联节点，减少重复嵌套导致的样式残留"]
+  },
+  {
+    version: "1.2.98",
+    date: "2026-06-13",
+    title: "知识点排版日志排查",
+    featureUpdates: ["新增知识点排版调试日志，记录工具命令、选区和保存结果"],
+    fixes: ["修复文字排版后立即规范化编辑区导致后续按钮失效的问题"],
+    optimizations: ["新增独立排版推演页，覆盖加粗回撤、字号、字体、颜色和装饰线等操作"]
+  },
+  {
+    version: "1.2.97",
+    date: "2026-06-13",
+    title: "知识点排版规则固化",
+    featureUpdates: ["知识点段间距和字间距改为编辑器统一控制，不随字号调整变化"],
+    fixes: ["修复文字类排版命令可能改动段落结构并产生空行的问题"],
+    optimizations: ["保存时只保留必要的文字差异格式，减少普通格式被固化为不可修改基准的情况"]
+  },
+  {
+    version: "1.2.96",
+    date: "2026-06-13",
+    title: "知识点字号修复",
+    featureUpdates: ["知识点字号调整改为只作用于选中文本"],
+    fixes: ["修复调整字号时选区上下生成空行的问题"],
+    optimizations: ["字号下拉框减少重复触发，避免一次选择产生多次排版写入"]
+  },
+  {
+    version: "1.2.95",
+    date: "2026-06-13",
+    title: "知识点格式重置",
+    featureUpdates: ["已有知识点内容已清空历史排版格式，回到无内联样式的初始正文状态"],
+    fixes: ["修复全选加粗后再次点击加粗无法取消，以及全选排版后段首出现空格的问题"],
+    optimizations: ["取消排版时优先移除对应样式，保存时自动裁剪段首段尾空白"]
+  },
+  {
+    version: "1.2.94",
+    date: "2026-06-13",
+    title: "知识点排版命令拆分",
+    featureUpdates: ["知识点文本排版拆分为独立命令，粗体、斜体、下划线、删除线、颜色、列表、缩进和清除格式分开处理"],
+    fixes: ["修复普通正文、标题正文混合选区在重复点击排版按钮时状态判断混乱的问题"],
+    optimizations: ["保存时自动清理与段落样式重复的内联标签，减少历史样式残留对后续排版的影响"]
+  },
+  {
+    version: "1.2.93",
+    date: "2026-06-13",
+    title: "知识点文本工具重构",
+    featureUpdates: ["知识点粗体、斜体、下划线、删除线改为可再次点击取消"],
+    fixes: ["修复加粗只能开启不能关闭，以及 Ctrl+X 被错误占用导致剪切不可用的问题"],
+    optimizations: ["列表、缩进、清除格式和插入内容统一使用知识点选区命令，减少浏览器排版命令的不稳定影响"]
+  },
+  {
+    version: "1.2.92",
+    date: "2026-06-13",
+    title: "知识点排版内核统一",
+    featureUpdates: ["知识点加粗、斜体、下划线、删除线和对齐统一使用稳定排版写入"],
+    fixes: ["修复工具栏切换焦点后部分选区格式没有真正落到正文的问题"],
+    optimizations: ["编辑区在选择变化时持续记忆选区，减少排版按钮、字体和颜色操作丢失选区的情况"]
+  },
+  {
+    version: "1.2.91",
+    date: "2026-06-13",
+    title: "知识点编辑内核重构",
+    featureUpdates: ["知识点加粗使用稳定选区样式写入"],
+    fixes: ["修复历史嵌套样式导致加粗、字号和颜色继续叠加污染正文的问题"],
+    optimizations: ["保存知识点时自动压平内联样式，减少冗余标签并提升后续排版稳定性"]
+  },
+  {
+    version: "1.2.90",
+    date: "2026-06-13",
+    title: "类型页加粗重构",
+    featureUpdates: ["知识点加粗改为稳定写入选区样式"],
+    fixes: ["修复股票类型知识点历史样式嵌套导致整页加粗不明显的问题"],
+    optimizations: ["清理类型页冗余样式，并在保存时简化重复的样式标签"]
+  },
+  {
+    version: "1.2.89",
+    date: "2026-06-13",
+    title: "性质页样式修复",
+    featureUpdates: ["股票性质知识点恢复可区分粗细的正文样式"],
+    fixes: ["修复性质页历史样式嵌套过深导致普通正文加粗无明显变化的问题"],
+    optimizations: ["清理性质页冗余样式标签，保留短标题加粗显示"]
+  },
+  {
+    version: "1.2.88",
+    date: "2026-06-13",
+    title: "颜色区回撤",
+    featureUpdates: ["知识点文字颜色和背景颜色恢复为原生取色器"],
+    fixes: ["回撤常用色板及后续排版工具改动，恢复原先排版工具交互"],
+    optimizations: ["工具栏恢复原有横向滚动方式，减少颜色面板对排版操作的干扰"]
+  },
+  {
+    version: "1.2.87",
+    date: "2026-06-13",
+    title: "加粗显示增强",
+    featureUpdates: ["知识点加粗改为更明显的重字重样式"],
+    fixes: ["修复局部文字加粗后视觉变化不明显的问题"],
+    optimizations: ["保存知识点时压平重复嵌套的相同样式，减少连续排版产生的冗余标签"]
+  },
+  {
+    version: "1.2.86",
+    date: "2026-06-13",
+    title: "加粗样式稳定修复",
+    featureUpdates: ["知识点加粗、斜体、下划线和删除线改为直接应用到选区"],
+    fixes: ["修复部分正文选区点击加粗后只激活按钮但文字样式没有写入的问题"],
+    optimizations: ["文字样式按钮与颜色、字号使用同一套选区处理方式"]
+  },
+  {
+    version: "1.2.85",
+    date: "2026-06-13",
+    title: "排版工具实机修复",
+    featureUpdates: ["知识点排版按钮改为按下即应用到当前正文选区"],
+    fixes: ["修复加粗、颜色等工具点击后没有应用到选中文字的问题"],
+    optimizations: ["色板浮层不再被工具栏裁剪，常用色选择区域完整显示"]
+  },
+  {
+    version: "1.2.84",
+    date: "2026-06-13",
+    title: "排版工具恢复",
+    featureUpdates: ["知识点排版工具恢复加粗、颜色、对齐等常用操作"],
+    fixes: ["修复点击工具栏后正文选区丢失导致排版命令不生效的问题"],
+    optimizations: ["工具栏仅保护按钮类操作的正文选区，保留下拉框和取色器原生交互"]
+  },
+  {
+    version: "1.2.83",
+    date: "2026-06-13",
+    title: "排版工具点击修复",
+    featureUpdates: ["知识点颜色入口保留常用色板和自定义取色器"],
+    fixes: ["修复色板改造后排版工具点击被工具栏选区保护拦截的问题"],
+    optimizations: ["调整色板菜单悬停区域，减少移动鼠标时菜单意外关闭"]
+  },
+  {
+    version: "1.2.82",
+    date: "2026-06-13",
+    title: "知识点常用色板",
+    featureUpdates: ["知识点文字颜色和背景颜色新增常用色板"],
+    fixes: ["保留自定义取色器，仍可选择任意文字和背景颜色"],
+    optimizations: ["颜色入口改为悬停展开，常用色与自定义色集中在同一控件"]
+  },
+  {
+    version: "1.2.81",
+    date: "2026-06-13",
+    title: "父级知识点页开关",
+    featureUpdates: ["知识点工具栏新增父级标题知识点页开关"],
+    fixes: ["关闭后有子分支的标题不再打开自己的知识点页，子分支仍可正常进入"],
+    optimizations: ["开关状态随课程保存，重启后保持上次设置"]
+  },
+  {
+    version: "1.2.80",
+    date: "2026-06-13",
+    title: "知识点有内容翻页",
+    featureUpdates: ["知识点工具栏新增上一页和下一页切换按钮"],
+    fixes: ["翻页仅跳转到已写入内容的知识点页面，自动跳过空白页面"],
+    optimizations: ["切换前会保存当前知识点内容，按钮无可跳转页面时自动禁用"]
+  },
+  {
+    version: "1.2.79",
+    date: "2026-06-13",
+    title: "格式刷双击复用恢复",
+    featureUpdates: ["知识点格式刷恢复为双击进入连续复用"],
+    fixes: ["取消单击开启后选区自动应用的交互"],
+    optimizations: ["单击仍用于复制或应用一次，连续复用可通过关闭按钮或 Esc 退出"]
+  },
+  {
+    version: "1.2.78",
+    date: "2026-06-13",
+    title: "格式刷选区应用",
+    featureUpdates: ["知识点格式刷改为点击开启后可直接选中文字应用格式"],
+    fixes: ["再次点击格式刷即可关闭，避免连续刷格式时反复点击按钮"],
+    optimizations: ["仅在鼠标选中非空内容后自动刷格式，普通点击正文不触发"]
+  },
+  {
+    version: "1.2.77",
+    date: "2026-06-12",
+    title: "知识点格式刷复用",
+    featureUpdates: ["知识点格式刷支持双击进入连续复用"],
+    fixes: ["区分格式刷单击应用和双击复用，避免双击时误触发一次性应用"],
+    optimizations: ["连续格式刷可重复应用，仍可通过关闭按钮或 Esc 退出"]
+  },
+  {
+    version: "1.2.76",
+    date: "2026-06-12",
+    title: "AI 学习体系整理",
+    featureUpdates: ["补充可执行的 AI 辅助课程学习体系"],
+    fixes: ["将案例调研结果收束为学习流程、产物和验收标准"],
+    optimizations: ["突出课程资料导入、知识建模、练习反馈和复盘沉淀"]
+  },
+  {
+    version: "1.2.75",
+    date: "2026-06-12",
+    title: "AI 学习案例调研",
+    featureUpdates: ["补充 AI 工具辅助课程学习体系搭建的案例调研记录"],
+    fixes: ["整理 B 站与知乎来源中的可借鉴学习流程"],
+    optimizations: ["提炼资料导入、框架构建、练习验证和复盘沉淀的学习闭环"]
+  },
+  {
+    version: "1.2.74",
+    date: "2026-06-12",
+    title: "Mimo 调用提速",
+    featureUpdates: ["Mimo 普通问答改为轻量请求路径"],
+    fixes: ["修复 README 快捷发送被误判为知识点改写导致响应变慢的问题"],
+    optimizations: ["普通 Mimo 请求不再附带知识点 HTML，并降低输出预算与等待时间"]
+  },
+  {
+    version: "1.2.73",
+    date: "2026-06-12",
+    title: "README 快捷发送精简",
+    featureUpdates: ["系统信息快捷按钮改为发送 README 内容"],
+    fixes: ["减少聊天快捷发送内容过长的问题"],
+    optimizations: ["仅附带当前课程与知识点边界，避免冗余运行信息占用聊天窗口"]
+  },
+  {
+    version: "1.2.72",
+    date: "2026-06-12",
+    title: "系统信息快捷发送",
+    featureUpdates: ["知识点聊天新增系统信息快捷按钮，可一键发送系统上下文"],
+    fixes: ["补充 README 系统说明，覆盖运行路径、存储位置、AI 接入和 MCP 入口"],
+    optimizations: ["聊天发送上下文时自动附带当前课程与当前知识点信息"]
+  },
+  {
+    version: "1.2.71",
+    date: "2026-06-12",
+    title: "界面文字修复",
+    featureUpdates: ["恢复课程中心、学习工作台、目录与工具栏的中文显示"],
+    fixes: ["修复多处固定界面文案因编码错解出现乱码"],
+    optimizations: ["清理字体、段落样式、流程图与导图工具栏的中文标签"]
+  },
+  {
+    version: "1.2.70",
+    date: "2026-06-12",
+    title: "任务回调兜底",
+    featureUpdates: ["Claude 任务回调改为事件流与状态轮询并行等待"],
+    fixes: ["连续发送第二条消息时，任务已完成但聊天窗口仍转圈的问题"],
+    optimizations: ["事件流结束时补读最后一段完成事件，并在投递后立即检查一次任务状态"]
+  },
+  {
+    version: "1.2.69",
+    date: "2026-06-12",
+    title: "Claude 原文投递",
+    featureUpdates: ["Claude 回答改为仅投递用户输入原文"],
+    fixes: ["任务完成回调优先监听 The Muti Agent 事件流，减少完成后仍转圈的问题"],
+    optimizations: ["Claude 通道保留任务状态轮询兜底，事件流不可用时仍可读取结果"]
+  },
+  {
+    version: "1.2.68",
+    date: "2026-06-12",
+    title: "Claude 任务追踪",
+    featureUpdates: ["Claude 回答改为投递后台任务并通过任务追踪读取结果"],
+    fixes: ["移除旧的会话问答与日志兜底路径，避免聊天结果来源混杂"],
+    optimizations: ["按 The Muti Agent 的任务投递、状态查询、完成读取流程整理 Claude 通道"]
+  },
+  {
+    version: "1.2.67",
+    date: "2026-06-12",
+    title: "Mimo 响应提速",
+    featureUpdates: ["Mimo 回答保留直接调用模式，并优化普通问答响应速度"],
+    fixes: ["兼容 Mimo 返回 JSON 代码块时的结果解析"],
+    optimizations: ["普通 Mimo 问答减少上下文与输出预算，编辑类请求仍保留更高输出空间"]
+  },
+  {
+    version: "1.2.66",
+    date: "2026-06-12",
+    title: "Mimo 回答选择",
+    featureUpdates: ["知识点聊天新增 Claude 与 Mimo 回答来源切换"],
+    fixes: ["Mimo 回答不显示推理过程，仅在结果完成后反馈正文"],
+    optimizations: ["接入 mimo-v2.5-pro，并使用本地配置读取 Token Plan 凭证"]
+  },
+  {
+    version: "1.2.65",
+    date: "2026-06-12",
+    title: "Claude MCP 对接",
+    featureUpdates: ["知识点聊天改为通过 AIstudy MCP 受控任务连接 Claude Code"],
+    fixes: ["聊天请求不再依赖同步会话返回，避免 Claude 已完成但窗口持续转圈"],
+    optimizations: ["按课程复用 Claude Code 会话，并由 AIstudy 校验后仅写回当前知识点"]
+  },
+  {
+    version: "1.2.64",
+    date: "2026-06-12",
+    title: "Claude 等待兜底",
+    featureUpdates: ["知识点聊天在 Claude Code 日志完成后可直接返回最终结果"],
+    fixes: ["Claude Code 已生成结果但桥接请求未结束时，聊天窗口不再持续转圈"],
+    optimizations: ["复用固定课程会话时优先读取同会话最新结果日志，减少等待卡住"]
+  },
+  {
+    version: "1.2.63",
+    date: "2026-06-12",
+    title: "Claude 聊天结果容错",
+    featureUpdates: ["知识点聊天会自动提取 Claude Code 的最终回复内容"],
+    fixes: ["Claude 返回非严格 JSON 时不再把原始日志直接显示在聊天窗口"],
+    optimizations: ["自动恢复 Claude Code 日志中的中文编码显示，聊天反馈更干净"]
+  },
+  {
+    version: "1.2.62",
+    date: "2026-06-12",
+    title: "Claude Code 聊天接入",
+    featureUpdates: ["知识点聊天窗口接入固定 Claude Code 会话，按进入课程绑定独立会话"],
+    fixes: ["Claude Code 写回时仅允许更新当前课程的当前知识点内容"],
+    optimizations: ["聊天处理期间显示等待转圈，结果完成后再反馈最终回复"]
+  },
+  {
+    version: "1.2.61",
+    date: "2026-06-12",
+    title: "标题正文样式",
+    featureUpdates: ["知识点工具栏新增标题与正文样式"],
+    fixes: ["标题和正文排版格式会随知识点内容保存"],
+    optimizations: ["预设采用中文文档常用字体、字号、缩进、对齐和行距"]
+  },
+  {
+    version: "1.2.60",
+    date: "2026-06-12",
+    title: "AI 聊天入口",
+    featureUpdates: ["知识点页面右下角新增 AI 辅助聊天入口"],
+    fixes: ["聊天窗口仅保留必要输入区域，减少页面说明干扰"],
+    optimizations: ["使用现有头像作为悬浮入口，点击后弹出轻量聊天窗"]
+  },
+  {
+    version: "1.2.59",
+    date: "2026-06-12",
+    title: "知识点流程图",
+    featureUpdates: ["知识点正文支持插入流程图并重新载入编辑"],
+    fixes: ["流程图块会随知识点内容保存，切换目录或重启后可继续编辑"],
+    optimizations: ["流程图编辑器支持节点、形状、连线和标签调整"]
+  },
+  {
+    version: "1.2.58",
+    date: "2026-06-12",
+    title: "知识点缩放",
+    featureUpdates: ["知识点正文支持 Ctrl 加鼠标滚轮放大和缩小"],
+    fixes: ["缩放时阻止浏览器页面整体缩放，避免工具栏和布局被误放大"],
+    optimizations: ["知识点正文缩放比例会保留到下次打开"]
+  },
+  {
+    version: "1.2.57",
+    date: "2026-06-12",
+    title: "目录层级折叠",
+    featureUpdates: ["知识点目录支持按层级折叠和展开"],
+    fixes: ["重启后保留上次手动折叠的目录状态"],
+    optimizations: ["有下级的目录项显示独立箭头，目录层级浏览更紧凑"]
+  },
+  {
+    version: "1.2.56",
+    date: "2026-06-12",
+    title: "MCP 路线功能补全",
+    featureUpdates: ["课程库 MCP 新增目录搜索、知识点搜索、目录导出和巡检报告"],
+    fixes: ["路线菜单补充中文用途说明和数据影响提示"],
+    optimizations: ["MCP 引导按巡检、读取、写入、备份、迁移、数据库路线细分步骤"]
+  },
+  {
+    version: "1.2.55",
+    date: "2026-06-12",
+    title: "MCP 路线式启动",
+    featureUpdates: ["新增 MCP.ps1 PowerShell 启动器，一条命令进入课程库 MCP 引导"],
+    fixes: ["MCP.py 交互菜单改为路线选择，减少平铺选项造成的选择负担"],
+    optimizations: ["课程库 MCP 按巡检、读取、写入、备份、迁移和数据库路线组织流程"]
+  },
+  {
+    version: "1.2.54",
+    date: "2026-06-12",
+    title: "课程库 MCP 脚本入口",
+    featureUpdates: ["新增 PowerShell 引导式 MCP.py，可执行课程库状态、目录、知识点、备份、导入导出和 MySQL 同步服务"],
+    fixes: ["课程库直接写入服务加入运行状态拦截、写前备份和写后校验"],
+    optimizations: ["MCP.py 支持交互菜单和命令行 JSON 输出，便于 Claude 或 PowerShell 自动调用"]
+  },
+  {
+    version: "1.2.53",
+    date: "2026-06-12",
+    title: "MCP 状态控制台",
+    featureUpdates: ["MCP 页面新增调用进度、阶段状态和实时日志"],
+    fixes: ["补齐 MCP 接入状态持续检测反馈"],
+    optimizations: ["MCP 页面改为紧凑控制台布局，关键状态集中在首屏"]
+  },
+  {
+    version: "1.2.52",
+    date: "2026-06-12",
+    title: "目录初始宽度调整",
+    featureUpdates: ["课程目录初始宽度略微加宽"],
+    fixes: ["减少目录内容初次进入时过窄导致的换行拥挤"],
+    optimizations: ["保留拖拽调宽能力，知识点与导图区布局更舒展"]
+  },
+  {
+    version: "1.2.51",
+    date: "2026-06-12",
+    title: "格式刷跨页面",
+    featureUpdates: ["知识点和思维导图格式刷支持切换页面后继续使用"],
+    fixes: ["修复知识点目录切换后格式刷状态丢失的问题"],
+    optimizations: ["格式刷状态提升到课程工作区，跨分支排版更连续"]
+  },
+  {
+    version: "1.2.50",
+    date: "2026-06-12",
+    title: "导图工具区简化",
+    featureUpdates: ["课程顶部栏和思维导图功能区改为轻量工具条"],
+    fixes: ["减少功能区分组边框和标题造成的视觉拥挤"],
+    optimizations: ["工具按钮改为紧凑图标样式，导图区上方空间更简洁"]
+  },
+  {
+    version: "1.2.49",
+    date: "2026-06-12",
+    title: "知识点标题区移除",
+    featureUpdates: ["知识点编辑页移除内部标题区"],
+    fixes: ["清理知识点工具栏上方多余占位"],
+    optimizations: ["知识点功能区上移，正文可用高度更大"]
+  },
+  {
+    version: "1.2.48",
+    date: "2026-06-12",
+    title: "课程顶部栏合并",
+    featureUpdates: ["返回课程中心和课程功能切换合并为同一条顶部栏"],
+    fixes: ["移除课程详情顶部双层工具栏造成的额外占位"],
+    optimizations: ["课程内容区上方空间更紧凑，导图和知识点可视区域更大"]
+  },
+  {
+    version: "1.2.47",
+    date: "2026-06-12",
+    title: "课程工作区顶部精简",
+    featureUpdates: ["课程详情顶部切换入口移到工作区栏左侧"],
+    fixes: ["移除课程详情和知识点标题区重复的已保存状态"],
+    optimizations: ["返回课程中心按钮改为更轻量的胶囊样式，减少顶部视觉占用"]
+  },
+  {
+    version: "1.2.46",
+    date: "2026-06-12",
+    title: "格式刷关闭优化",
+    featureUpdates: ["知识点和思维导图格式刷新增关闭按钮"],
+    fixes: ["修复格式刷激活后不易退出的问题"],
+    optimizations: ["格式刷应用一次后自动退出，知识点编辑区支持 Esc 关闭格式刷"]
+  },
+  {
+    version: "1.2.45",
+    date: "2026-06-12",
+    title: "MySQL 静默启动修复",
+    featureUpdates: ["MySQL 仍随 AIstudy 自动启动"],
+    fixes: ["修复启动 AIstudy 时 MySQL 命令窗口或 Windows Terminal 弹出的问题"],
+    optimizations: ["数据库启动改为隐藏窗口后台进程，并继续记录启动日志"]
+  },
+  {
     version: "1.2.44",
     date: "2026-06-12",
     title: "知识点格式刷增强",
@@ -131,8 +955,8 @@ export const updateLog: UpdateLogEntry[] = [
   {
     version: "1.2.29",
     date: "2026-06-11",
-    title: "知识点面板排版修复",
-    featureUpdates: ["知识点正文面板改为完整铺满编辑区"],
+    title: "知识点排版修复",
+    featureUpdates: ["知识点内容改为可编辑"],
     fixes: ["修复正文区域上下和左右空挡过大的问题"],
     optimizations: ["收紧正文行距与段落间距，内容呈现更紧凑"]
   },
@@ -142,7 +966,7 @@ export const updateLog: UpdateLogEntry[] = [
     title: "静默自动保存",
     featureUpdates: ["课程内容改为后台静默自动保存"],
     fixes: ["修复连续编辑时多次保存可能乱序落库的问题"],
-    optimizations: ["保存状态改为低干扰提示，失败时保留本地缓存"]
+    optimizations: ["保存状态改为轻量提示，失败时自动兜底"]
   },
   {
     version: "1.2.27",
@@ -230,7 +1054,7 @@ export const updateLog: UpdateLogEntry[] = [
     title: "MCP 写入强制规范",
     featureUpdates: ["Notion 知识点导入新增写入强制门槛"],
     fixes: ["补齐歧义分支、缺少备份、危险 HTML 和验收失败时的阻断规则"],
-    optimizations: ["MCP 状态面板新增写入规范状态卡"]
+    optimizations: ["MCP 状态改为按流程状态呈现"]
   },
   {
     version: "1.2.16",
@@ -245,8 +1069,8 @@ export const updateLog: UpdateLogEntry[] = [
     date: "2026-06-11",
     title: "MCP 状态引导",
     featureUpdates: ["MCP 页面新增规范、接入和执行三段式状态检测"],
-    fixes: ["补齐 Notion 缓存、课程库、MySQL 和导入备份检测"],
-    optimizations: ["MCP 功能入口改为引导式状态面板"]
+    fixes: ["补齐 Notion 课程导入和 MySQL 同步备份提示"],
+    optimizations: ["MCP 页面改为卡片式状态呈现"]
   },
   {
     version: "1.2.14",
@@ -332,9 +1156,9 @@ export const updateLog: UpdateLogEntry[] = [
     version: "1.2.4",
     date: "2026-06-11",
     title: "课程数据持久化",
-    featureUpdates: ["课程中心新增本地文件数据库保存", "启动时可从旧课程缓存自动恢复数据"],
-    fixes: ["修复课程数据可能因缓存或发布环境变化而丢失的问题"],
-    optimizations: ["旧课程缓存会自动迁移到更稳定的本地数据库"]
+    featureUpdates: ["课程中心新增本地文件数据库保存", "启动时可从旧课程缓存自动恢复"],
+    fixes: ["修复课程数据库缓存发布变化后失效的问题"],
+    optimizations: ["旧课程缓存自动迁移到稳定数据库"]
   },
   {
     version: "1.2.3",
@@ -401,15 +1225,15 @@ export const updateLog: UpdateLogEntry[] = [
     version: "1.0.18",
     date: "2026-06-09",
     title: "目录自适应布局",
-    featureUpdates: ["目录面板宽度调整时右侧内容区域自动适应", "使用 CSS Grid 实现真正的自适应布局"],
-    fixes: ["修复目录拖动时右侧板块被覆盖的问题"],
+    featureUpdates: ["目录宽度调整时页面也自动适应", "使用 CSS Grid 实现真正的自适应布局"],
+    fixes: ["修复目录拉伸时页面布局被挤压"],
     optimizations: ["整个编辑器布局使用 CSS 变量控制，更灵活"]
   },
   {
     version: "1.0.17",
     date: "2026-06-09",
-    title: "目录面板优化",
-    featureUpdates: ["目录面板支持拖动调整宽度（180-500px）", "目录项支持自动换行显示"],
+    title: "目录优化",
+    featureUpdates: ["目录支持拖拽宽度：180-500px", "目录项支持自动换行显示"],
     fixes: [],
     optimizations: ["目录文本溢出时自动换行，不再截断"]
   },
@@ -665,7 +1489,7 @@ export const updateLog: UpdateLogEntry[] = [
     version: "0.8.0",
     date: "2026-06-08",
     title: "更新管理",
-    featureUpdates: ["新增更新管理板块", "版本记录支持折叠查看", "最新版本自动置顶"],
+    featureUpdates: ["新增更新管理入口", "版本记录支持折叠查看", "最新版本自动置顶"],
     fixes: ["统一更新记录入口"],
     optimizations: ["更新说明按功能、修复、优化归类"]
   },

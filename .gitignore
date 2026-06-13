@@ -18,9 +18,18 @@ dist/
 dist-electron/
 release/
 release-fixed/
+release-*/
+index-*.js
 
 # Ignore agent/tool scratch directories
 .claude/
+.claude-content-sandbox/
 .omx/
+
+# Ignore generated runtime caches and local probes
+__pycache__/
+*.pyc
+tools/*-cdp-test.mjs
+tools/knowledge-format-probe.html
 
 # 保留所有文件（使用 Git LFS 管理大文件）

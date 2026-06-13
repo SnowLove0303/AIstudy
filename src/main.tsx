@@ -2,6 +2,22 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client";
 import MindElixir, { SIDE, type MindElixirData, type MindElixirInstance, type NodeObj } from "mind-elixir";
 import "mind-elixir/style.css";
+import CanvasEditor, {
+  getElementListByHTML,
+  EditorMode,
+  ListStyle,
+  ListType,
+  PageMode,
+  PaperDirection,
+  RowFlex,
+  TitleLevel,
+  WordBreak,
+  type IEditorData,
+  type IElement,
+  type IEditorOption,
+  type IRange,
+  type IRangeStyle
+} from "@hufe921/canvas-editor";
 import {
   AlignCenter,
   AlignJustify,
@@ -45,19 +61,21 @@ import {
   PanelRight,
   Plus,
   PlayCircle,
+  Printer,
   Redo2,
   RotateCcw,
   Rows3,
-  Save,
   Search,
   Settings,
   Sparkles,
   StickyNote,
   Target,
   Tags,
+  Table,
   Trash2,
   Type,
   Undo2,
+  X,
   ZoomIn,
   ZoomOut,
   UsersRound
@@ -65,11 +83,32 @@ import {
 import { updateLog, type UpdateLogEntry } from "./updateLog";
 import "./styles.css";
 
-type ViewId = "dashboard" | "courses" | "plan" | "notes" | "practice" | "assistant" | "mcp" | "updates" | "settings";
+type ViewId =
+  | "dashboard"
+  | "courses"
+  | "developer"
+  | "plan"
+  | "notes"
+  | "practice"
+  | "assistant"
+  | "mcp"
+  | "updates"
+  | "information"
+  | "settings";
 type Tone = "teal" | "amber" | "blue" | "rose";
 
 type Task = { title: string; meta: string; progress: number; tone: Tone };
 type ScheduleItem = { time: string; title: string; tag: string };
+type KnowledgeCanvasDocument = {
+  kind: "canvas-editor";
+  version: 1 | 2;
+  nodeId: string;
+  topic: string;
+  html: string;
+  data: IEditorData;
+  options?: IEditorOption;
+  updatedAt: string;
+};
 type Course = {
   id: string;
   title: string;
@@ -79,9 +118,52 @@ type Course = {
   createdAt: string;
   mindMap: MindElixirData;
   knowledgePoints: Record<string, string>;
+  knowledgeDocuments?: Record<string, KnowledgeCanvasDocument>;
   branchMindMaps?: Record<string, MindElixirData>;
   syncNumberedOutline?: boolean;
   numberedOutlineSnapshot?: OutlineItem[];
+  collapsedOutlineIds?: string[];
+  hideParentKnowledgePages?: boolean;
+};
+type CourseCenterLabels = {
+  centerTitle: string;
+  detailBackLabel: string;
+  heroTitle: string;
+  statusCountSuffix: string;
+  createTitle: string;
+  titleLabel: string;
+  titlePlaceholder: string;
+  categoryLabel: string;
+  categoryPlaceholder: string;
+  defaultCategory: string;
+  createButton: string;
+  emptyTitle: string;
+  categoryFallback: string;
+  manageCategory: string;
+  continueTitle: string;
+  continueFallback: string;
+  enterButton: string;
+  statsCategorySuffix: string;
+  weeklyMeta: string;
+  switchKnowledge: string;
+  switchNotes: string;
+  switchMindmap: string;
+  initialBranchTitle: string;
+};
+type CourseCollectionId = "courses" | "developer";
+type CourseCollectionApi = {
+  load: () => Promise<unknown>;
+  save: (items: unknown) => Promise<void>;
+};
+type CourseCollectionConfig = {
+  id: CourseCollectionId;
+  viewId: Extract<ViewId, "courses" | "developer">;
+  navLabel: string;
+  icon: typeof Home;
+  storageKey: string;
+  payloadKey: "courses" | "documents";
+  labels: CourseCenterLabels;
+  getApi: () => CourseCollectionApi | undefined;
 };
 type OutlineItem = {
   id: string;
@@ -105,10 +187,66 @@ type NoteEntry = {
 type KnowledgeFormatBrush = {
   inlineStyles: Record<string, string>;
   blockStyles: Record<string, string>;
+  reusable?: boolean;
 };
+type CanvasKnowledgeFormatBrush = {
+  styles: Partial<Pick<IElement, "font" | "size" | "bold" | "italic" | "underline" | "strikeout" | "color" | "highlight" | "rowFlex" | "rowMargin" | "letterSpacing" | "level" | "listType" | "listStyle">>;
+  reusable: boolean;
+};
+type KnowledgeStylePatch = Record<string, string | null | undefined>;
+type MindFormatBrush = NonNullable<NodeObj["style"]>;
 type KnowledgeHistoryState = {
   canUndo: boolean;
   canRedo: boolean;
+};
+type AiChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+type AiChatResult = {
+  ok?: boolean;
+  reply?: string;
+  applied?: boolean;
+  updatedKnowledgeHtml?: string;
+  error?: string;
+};
+type AiChatProvider = "claude" | "mimo" | "doubao" | "chatgpt";
+type SystemContextInfo = {
+  app?: Record<string, unknown>;
+  paths?: Record<string, unknown>;
+  storage?: Record<string, unknown>;
+  ai?: Record<string, unknown>;
+  docs?: {
+    readme?: string;
+    projectIndex?: string;
+    updateLog?: string;
+    readmeContent?: string;
+  };
+};
+type FlowchartNodeKind = "start" | "process" | "decision" | "end";
+type FlowchartNode = {
+  id: string;
+  label: string;
+  kind: FlowchartNodeKind;
+  x: number;
+  y: number;
+};
+type FlowchartEdge = {
+  id: string;
+  from: string;
+  to: string;
+  label: string;
+};
+type KnowledgeFlowchart = {
+  title: string;
+  nodes: FlowchartNode[];
+  edges: FlowchartEdge[];
+};
+type FlowchartEditorState = {
+  blockId: string;
+  data: KnowledgeFlowchart;
+  selectedNodeId: string;
 };
 type CourseWorkspaceMode = "knowledge" | "notes" | "mindmap";
 type AppSettings = {
@@ -127,10 +265,109 @@ type McpNotionImportStatus = {
   latestBackupPath: string | null;
   latestBackupReady: boolean;
 };
+type McpStatusItem = {
+  key: string;
+  title: string;
+  meta: string;
+  ready: boolean;
+  detail: string;
+};
+type McpLogEntry = {
+  id: string;
+  time: string;
+  title: string;
+  detail: string;
+  level: "run" | "ok" | "warn";
+};
+type ManagedPortPlatformId = "bilibili" | "zhihu" | "doubao" | "chatgpt";
+type ManagedPortStatus = {
+  id: ManagedPortPlatformId;
+  label: string;
+  port: number;
+  loginUrl: string;
+  hostKeyword: string;
+  source: string;
+  kind?: "cdp";
+  endpointLabel?: string;
+  loginActionLabel?: string;
+  startActionLabel?: string;
+  canStartService?: boolean;
+  cdpUrl: string;
+  profileDir: string;
+  profileReady: boolean;
+  ready: boolean;
+  activeTitle: string;
+  activeUrl: string;
+  browser: string;
+  lastCheckedAt: string;
+  error?: string;
+};
+type OpenManagedLoginWindowResult = {
+  opened: boolean;
+  message: string;
+  status: ManagedPortStatus;
+};
+type StartManagedPortServiceResult = {
+  started: boolean;
+  message: string;
+  status: ManagedPortStatus;
+};
+type AiDailySource = "bilibili" | "zhihu";
+type AiDailySection = {
+  index?: number;
+  title?: string;
+  text?: string;
+};
+type AiDailyManifest = {
+  source?: AiDailySource;
+  bvid?: string;
+  zhihuUrl?: string;
+  sourceId?: string;
+  query?: string;
+  title?: string;
+  author?: string;
+  sourceUrl?: string;
+  generatedAt?: string;
+  summary?: string;
+  runDirectory?: string;
+  transcriptPath?: string;
+  cleanTranscriptPath?: string;
+  markdownPath?: string;
+  htmlPath?: string;
+  chunkCount?: number;
+  sections?: AiDailySection[];
+  highlights?: string[];
+  qualityNotes?: string[];
+};
+type AiDailyRunResult = {
+  ok: boolean;
+  message: string;
+  stdout: string;
+  stderr: string;
+  manifest: AiDailyManifest | null;
+};
+type AiDailyAutoTask = {
+  id: string;
+  source: AiDailySource;
+  target: string;
+  time: string;
+  enabled: boolean;
+  lastRunDate?: string;
+};
+type McpPhaseItem = {
+  key: string;
+  title: string;
+  meta: string;
+  ready: boolean;
+  progress: number;
+  icon: React.ReactNode;
+};
 
 const mascotUrl = `${import.meta.env.BASE_URL}mascot.png`;
 const coursesStorageKey = "aistudy:courses:v1";
+const developerDocumentsStorageKey = "aistudy:developer-documents:v1";
 const settingsStorageKey = "aistudy:settings:v1";
+const aiDailyTasksStorageKey = "aistudy:ai-daily-tasks:v1";
 const courseSaveStatusEvent = "aistudy:course-save-status";
 const knowledgeFontFamilies = [
   { label: "微软雅黑", value: "Microsoft YaHei" },
@@ -141,12 +378,81 @@ const knowledgeFontFamilies = [
   { label: "Times", value: "Times New Roman" }
 ];
 const knowledgeFontSizes = ["12px", "14px", "16px", "18px", "20px", "22px", "24px", "28px", "32px", "36px"];
+const knowledgeTextColorSwatches = [
+  { label: "默认黑", value: "#111827" },
+  { label: "灰色", value: "#64748b" },
+  { label: "红色", value: "#dc2626" },
+  { label: "橙色", value: "#ea580c" },
+  { label: "黄色", value: "#ca8a04" },
+  { label: "绿色", value: "#16a34a" },
+  { label: "青色", value: "#0d9488" },
+  { label: "蓝色", value: "#2563eb" },
+  { label: "紫色", value: "#7c3aed" },
+  { label: "玫红", value: "#db2777" }
+];
 const knowledgeHistoryLimit = 80;
+const knowledgeZoomStorageKey = "aistudy:knowledge-zoom:v1";
+const knowledgeFormatDebugStorageKey = "aistudy:knowledge-format-debug:v1";
+const knowledgeZoomMin = 0.7;
+const knowledgeZoomMax = 1.8;
+const knowledgeZoomStep = 0.1;
+const knowledgeParagraphPresets = [
+  {
+    label: "标题一",
+    value: "heading1",
+    styles: {
+      fontFamily: "SimHei",
+      fontSize: "28px",
+      fontWeight: "800",
+      textAlign: "center",
+      textIndent: "0"
+    }
+  },
+  {
+    label: "标题二",
+    value: "heading2",
+    styles: {
+      fontFamily: "SimHei",
+      fontSize: "24px",
+      fontWeight: "800",
+      textAlign: "left",
+      textIndent: "0"
+    }
+  },
+  {
+    label: "标题三",
+    value: "heading3",
+    styles: {
+      fontFamily: "SimHei",
+      fontSize: "20px",
+      fontWeight: "800",
+      textAlign: "left",
+      textIndent: "0"
+    }
+  },
+  {
+    label: "正文",
+    value: "body",
+    styles: {
+      fontFamily: "SimSun",
+      fontSize: "16px",
+      fontWeight: "400",
+      textAlign: "justify",
+      textIndent: "2em"
+    }
+  }
+] as const;
 
 type CourseSaveStatus = "saving" | "saved" | "error";
 
-let pendingCourseSave: Course[] | null = null;
-let courseSaveInFlight = false;
+const pendingCollectionSaves: Record<CourseCollectionId, Course[] | null> = {
+  courses: null,
+  developer: null
+};
+const collectionSaveInFlight: Record<CourseCollectionId, boolean> = {
+  courses: false,
+  developer: false
+};
 
 function emitCourseSaveStatus(status: CourseSaveStatus) {
   window.dispatchEvent(new CustomEvent(courseSaveStatusEvent, { detail: status }));
@@ -165,24 +471,115 @@ const panControlScale = 4;
 
 const navItems: Array<{ id: ViewId; label: string; icon: typeof Home }> = [
   { id: "dashboard", label: "工作台", icon: Home },
-  { id: "courses", label: "课程库", icon: LibraryBig },
   { id: "plan", label: "学习计划", icon: CalendarDays },
   { id: "notes", label: "知识笔记", icon: NotebookPen },
   { id: "practice", label: "练习中心", icon: Target },
   { id: "assistant", label: "AI 助教", icon: Bot },
   { id: "mcp", label: "MCP", icon: Braces },
-  { id: "updates", label: "更新管理", icon: PackageCheck }
+  { id: "updates", label: "更新管理", icon: PackageCheck },
+  { id: "information", label: "信息搜集", icon: Search }
 ];
+
+const courseCenterLabels: CourseCenterLabels = {
+  centerTitle: "课程中心",
+  detailBackLabel: "返回课程中心",
+  heroTitle: "课程与思维导图",
+  statusCountSuffix: "门课程",
+  createTitle: "创建课程",
+  titleLabel: "课程名称",
+  titlePlaceholder: "金融市场基础知识",
+  categoryLabel: "分类",
+  categoryPlaceholder: "金融",
+  defaultCategory: "金融",
+  createButton: "创建并编辑导图",
+  emptyTitle: "暂无课程",
+  categoryFallback: "未分类",
+  manageCategory: "管理分类",
+  continueTitle: "继续学习",
+  continueFallback: "暂无继续学习课程",
+  enterButton: "进入课程",
+  statsCategorySuffix: "个学习方向",
+  weeklyMeta: "本周 0 节待学",
+  switchKnowledge: "知识点",
+  switchNotes: "知识笔记",
+  switchMindmap: "思维导图",
+  initialBranchTitle: "开篇"
+};
+
+const developerCenterLabels: CourseCenterLabels = {
+  centerTitle: "开发平台",
+  detailBackLabel: "返回开发平台",
+  heroTitle: "需求文档与结构导图",
+  statusCountSuffix: "份需求文档",
+  createTitle: "创建需求文档",
+  titleLabel: "需求名称",
+  titlePlaceholder: "AIstudy 开发需求",
+  categoryLabel: "项目",
+  categoryPlaceholder: "AIstudy",
+  defaultCategory: "AIstudy",
+  createButton: "创建并编辑需求",
+  emptyTitle: "暂无需求文档",
+  categoryFallback: "未归属项目",
+  manageCategory: "管理项目",
+  continueTitle: "继续编写",
+  continueFallback: "暂无继续编写需求",
+  enterButton: "进入需求",
+  statsCategorySuffix: "个项目方向",
+  weeklyMeta: "本周 0 项待写",
+  switchKnowledge: "需求内容",
+  switchNotes: "需求笔记",
+  switchMindmap: "结构导图",
+  initialBranchTitle: "需求概述"
+};
+
+const courseCollectionIndex: Record<CourseCollectionId, CourseCollectionConfig> = {
+  courses: {
+    id: "courses",
+    viewId: "courses",
+    navLabel: "课程库",
+    icon: LibraryBig,
+    storageKey: coursesStorageKey,
+    payloadKey: "courses",
+    labels: courseCenterLabels,
+    getApi: () => window.aistudy?.courses
+  },
+  developer: {
+    id: "developer",
+    viewId: "developer",
+    navLabel: "开发平台",
+    icon: FileText,
+    storageKey: developerDocumentsStorageKey,
+    payloadKey: "documents",
+    labels: developerCenterLabels,
+    getApi: () => window.aistudy?.developerDocuments
+  }
+};
+
+const courseCollectionNavItems = Object.values(courseCollectionIndex).map((collection) => ({
+  id: collection.viewId,
+  label: collection.navLabel,
+  icon: collection.icon
+}));
+
+const allNavItems: Array<{ id: ViewId; label: string; icon: typeof Home }> = [
+  navItems[0],
+  ...courseCollectionNavItems,
+  ...navItems.slice(1)
+];
+
+function getCourseCollectionByView(viewId: ViewId) {
+  return Object.values(courseCollectionIndex).find((collection) => collection.viewId === viewId) ?? null;
+}
 
 const focusTasks: Task[] = [];
 const schedule: ScheduleItem[] = [];
 const insights: string[] = [];
 
-function createMindMap(title: string): MindElixirData {
-  return MindElixir.new(title);
+function createMindMap(title: string, initialBranchTitle = "开篇"): MindElixirData {
+  return normalizeMindMapData(MindElixir.new(title), title, initialBranchTitle);
 }
 
-function createCourse(title: string, category: string, description: string): Course {
+function createCourse(title: string, category: string, description: string, initialBranchTitle = "开篇"): Course {
   return {
     id: crypto.randomUUID(),
     title,
@@ -190,83 +587,113 @@ function createCourse(title: string, category: string, description: string): Cou
     description,
     progress: 0,
     createdAt: new Date().toISOString(),
-    mindMap: createMindMap(title),
+    mindMap: createMindMap(title, initialBranchTitle),
     knowledgePoints: {},
+    knowledgeDocuments: {},
     branchMindMaps: {},
     syncNumberedOutline: true,
-    numberedOutlineSnapshot: []
+    numberedOutlineSnapshot: [],
+    collapsedOutlineIds: [],
+    hideParentKnowledgePages: false
   };
 }
 
-function loadCourses(): Course[] {
+function loadCourseCollection(collection: CourseCollectionConfig): Course[] {
   try {
-    const raw = localStorage.getItem(coursesStorageKey);
+    const raw = localStorage.getItem(collection.storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Course[];
-    return normalizeCourses(parsed);
+    return normalizeCourses(parsed, collection.labels.initialBranchTitle);
   } catch {
     return [];
   }
 }
 
-function normalizeCourses(value: unknown): Course[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((course) => ({
-    ...course,
-    knowledgePoints: course.knowledgePoints ?? {},
-    branchMindMaps: course.branchMindMaps ?? {},
-    syncNumberedOutline: course.syncNumberedOutline ?? true,
-    numberedOutlineSnapshot: course.numberedOutlineSnapshot ?? buildOutline(course.mindMap)
-  })) as Course[];
+function normalizeMindMapData(value: MindElixirData | null | undefined, title: string, initialBranchTitle = "开篇"): MindElixirData {
+  const source = value?.nodeData ? value : MindElixir.new(title);
+  const data = JSON.parse(JSON.stringify(source)) as MindElixirData;
+  data.nodeData = data.nodeData ?? MindElixir.new(title).nodeData;
+  data.nodeData.id = data.nodeData.id || crypto.randomUUID();
+  data.nodeData.topic = data.nodeData.topic || title;
+  data.nodeData.children = Array.isArray(data.nodeData.children) ? data.nodeData.children : [];
+
+  if (data.nodeData.children.length === 0) {
+    data.nodeData.children.push({
+      id: crypto.randomUUID(),
+      topic: initialBranchTitle
+    } as NodeObj);
+  }
+
+  return data;
 }
 
-function readPersistedCoursePayload(value: unknown): Course[] | null {
+function normalizeCourses(value: unknown, initialBranchTitle = "开篇"): Course[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((course) => {
+    const record = course as Course;
+    const mindMap = normalizeMindMapData(record.mindMap, record.title, initialBranchTitle);
+    return {
+      ...record,
+      mindMap,
+      knowledgePoints: record.knowledgePoints ?? {},
+      knowledgeDocuments: record.knowledgeDocuments ?? {},
+      branchMindMaps: record.branchMindMaps ?? {},
+      syncNumberedOutline: record.syncNumberedOutline ?? true,
+      numberedOutlineSnapshot: record.numberedOutlineSnapshot ?? buildOutline(mindMap),
+      collapsedOutlineIds: record.collapsedOutlineIds ?? [],
+      hideParentKnowledgePages: record.hideParentKnowledgePages ?? false
+    };
+  });
+}
+
+function readPersistedCourseCollectionPayload(value: unknown, collection: CourseCollectionConfig): Course[] | null {
   if (!value) return null;
-  if (Array.isArray(value)) return normalizeCourses(value);
-  if (typeof value === "object" && "courses" in value) {
-    return normalizeCourses((value as { courses?: unknown }).courses);
+  if (Array.isArray(value)) return normalizeCourses(value, collection.labels.initialBranchTitle);
+  if (typeof value === "object" && collection.payloadKey in value) {
+    return normalizeCourses((value as Record<string, unknown>)[collection.payloadKey], collection.labels.initialBranchTitle);
   }
   return null;
 }
 
-async function loadPersistedCourses(): Promise<Course[] | null> {
-  if (!window.aistudy?.courses) return null;
-  const payload = await window.aistudy.courses.load();
-  return readPersistedCoursePayload(payload);
+async function loadPersistedCourseCollection(collection: CourseCollectionConfig): Promise<Course[] | null> {
+  const api = collection.getApi();
+  if (!api) return null;
+  const payload = await api.load();
+  return readPersistedCourseCollectionPayload(payload, collection);
 }
 
-async function drainCourseSaveQueue() {
-  if (courseSaveInFlight) return;
-  courseSaveInFlight = true;
+async function drainCourseCollectionSaveQueue(collection: CourseCollectionConfig) {
+  if (collectionSaveInFlight[collection.id]) return;
+  collectionSaveInFlight[collection.id] = true;
 
-  while (pendingCourseSave) {
-    const coursesToSave = pendingCourseSave;
-    pendingCourseSave = null;
+  while (pendingCollectionSaves[collection.id]) {
+    const itemsToSave = pendingCollectionSaves[collection.id];
+    pendingCollectionSaves[collection.id] = null;
     emitCourseSaveStatus("saving");
 
     try {
-      await window.aistudy?.courses?.save(coursesToSave);
+      await collection.getApi()?.save(itemsToSave);
       emitCourseSaveStatus("saved");
     } catch (error) {
-      console.error("Failed to save course database", error);
+      console.error(`Failed to save ${collection.id} database`, error);
       emitCourseSaveStatus("error");
     }
   }
 
-  courseSaveInFlight = false;
+  collectionSaveInFlight[collection.id] = false;
 }
 
-function saveCourses(courses: Course[]) {
-  const snapshot = JSON.parse(JSON.stringify(courses)) as Course[];
-  localStorage.setItem(coursesStorageKey, JSON.stringify(snapshot));
+function saveCourseCollection(collection: CourseCollectionConfig, items: Course[]) {
+  const snapshot = JSON.parse(JSON.stringify(items)) as Course[];
+  localStorage.setItem(collection.storageKey, JSON.stringify(snapshot));
 
-  if (!window.aistudy?.courses?.save) {
+  if (!collection.getApi()?.save) {
     emitCourseSaveStatus("saved");
     return;
   }
 
-  pendingCourseSave = snapshot;
-  void drainCourseSaveQueue();
+  pendingCollectionSaves[collection.id] = snapshot;
+  void drainCourseCollectionSaveQueue(collection);
 }
 
 function loadSettings(): AppSettings {
@@ -281,6 +708,40 @@ function loadSettings(): AppSettings {
 
 function saveSettings(settings: AppSettings) {
   localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
+}
+
+function loadAiDailyAutoTasks(): AiDailyAutoTask[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(aiDailyTasksStorageKey) || "[]") as AiDailyAutoTask[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((task) =>
+        task &&
+        (task.source === "bilibili" || task.source === "zhihu") &&
+        typeof task.target === "string" &&
+        /^\d{2}:\d{2}$/.test(task.time)
+      )
+      .map((task) => ({
+        ...task,
+        enabled: Boolean(task.enabled)
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function saveAiDailyAutoTasks(tasks: AiDailyAutoTask[]) {
+  localStorage.setItem(aiDailyTasksStorageKey, JSON.stringify(tasks));
+}
+
+function clampKnowledgeZoom(value: number) {
+  return Math.min(knowledgeZoomMax, Math.max(knowledgeZoomMin, value));
+}
+
+function loadKnowledgeZoom() {
+  const raw = Number(localStorage.getItem(knowledgeZoomStorageKey));
+  if (!Number.isFinite(raw) || raw <= 0) return 1;
+  return clampKnowledgeZoom(raw);
 }
 
 function scheduleIdleTask(task: () => void, timeout = 500) {
@@ -376,6 +837,37 @@ function applyNumberedOutlineSnapshot(nextOutline: OutlineItem[], snapshot: Outl
     });
 }
 
+function getVisibleOutline(outline: OutlineItem[], collapsedIds: string[]) {
+  const collapsedSet = new Set(collapsedIds);
+  const hiddenParentIds = new Set<string>();
+
+  return outline.filter((item) => {
+    if (hiddenParentIds.has(item.parentId)) {
+      hiddenParentIds.add(item.id);
+      return false;
+    }
+
+    if (collapsedSet.has(item.id)) {
+      hiddenParentIds.add(item.id);
+    }
+
+    return true;
+  });
+}
+
+function getOutlineParentIds(outline: OutlineItem[]) {
+  return new Set(outline.map((item) => item.parentId));
+}
+
+function hasKnowledgeContent(rawHtml: string | undefined) {
+  if (!rawHtml) return false;
+  const container = document.createElement("div");
+  container.innerHTML = rawHtml;
+  const text = (container.textContent ?? "").replace(/\u00a0/g, " ").trim();
+  if (text.length > 0) return true;
+  return Boolean(container.querySelector("img, svg, canvas, table, ul, ol, li, .knowledge-flowchart, .knowledge-branch-map"));
+}
+
 function findMindMapNode(root: NodeObj, nodeId: string): NodeObj | null {
   if (root.id === nodeId) return root;
   for (const child of root.children ?? []) {
@@ -413,10 +905,135 @@ function renderKnowledgeBranchHtml(branch: NodeObj): string {
     '<span>分支思维导图</span>',
     `<strong>${escapeHtml(branch.topic)}</strong>`,
     "</div>",
-    renderBranchList(branch.children) || '<p class="branch-map-empty">当前分支暂无子节点</p>',
+    renderBranchList(branch.children) || '<p class="branch-map-empty">暂无子节点</p>',
     "</section>",
     "<p><br></p>"
   ].join("");
+}
+
+function createDefaultFlowchart(): KnowledgeFlowchart {
+  const startId = crypto.randomUUID();
+  const processId = crypto.randomUUID();
+  const endId = crypto.randomUUID();
+  return {
+    title: "流程图",
+    nodes: [
+      { id: startId, label: "开始", kind: "start", x: 80, y: 90 },
+      { id: processId, label: "处理步骤", kind: "process", x: 280, y: 90 },
+      { id: endId, label: "结束", kind: "end", x: 500, y: 90 }
+    ],
+    edges: [
+      { id: crypto.randomUUID(), from: startId, to: processId, label: "" },
+      { id: crypto.randomUUID(), from: processId, to: endId, label: "" }
+    ]
+  };
+}
+
+function normalizeFlowchartData(value: Partial<KnowledgeFlowchart> | null | undefined): KnowledgeFlowchart {
+  const fallback = createDefaultFlowchart();
+  const nodes = Array.isArray(value?.nodes)
+    ? value.nodes
+        .filter((node): node is FlowchartNode => Boolean(node?.id))
+        .map((node) => ({
+          id: node.id,
+          label: node.label || "节点",
+          kind: ["start", "process", "decision", "end"].includes(node.kind) ? node.kind : "process",
+          x: Number.isFinite(node.x) ? node.x : 120,
+          y: Number.isFinite(node.y) ? node.y : 120
+        }))
+    : fallback.nodes;
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = Array.isArray(value?.edges)
+    ? value.edges
+        .filter((edge): edge is FlowchartEdge => Boolean(edge?.id && nodeIds.has(edge.from) && nodeIds.has(edge.to)))
+        .map((edge) => ({ id: edge.id, from: edge.from, to: edge.to, label: edge.label || "" }))
+    : fallback.edges;
+
+  return {
+    title: value?.title || fallback.title,
+    nodes: nodes.length > 0 ? nodes : fallback.nodes,
+    edges
+  };
+}
+
+function getFlowchartBounds(data: KnowledgeFlowchart) {
+  const maxX = Math.max(620, ...data.nodes.map((node) => node.x + 160));
+  const maxY = Math.max(260, ...data.nodes.map((node) => node.y + 110));
+  return { width: maxX, height: maxY };
+}
+
+function getFlowchartNodeCenter(node: FlowchartNode) {
+  return { x: node.x + 64, y: node.y + 28 };
+}
+
+function renderFlowchartNodeSvg(node: FlowchartNode) {
+  const label = escapeHtml(node.label);
+  if (node.kind === "decision") {
+    const points = `${node.x + 64},${node.y} ${node.x + 128},${node.y + 28} ${node.x + 64},${node.y + 56} ${node.x},${node.y + 28}`;
+    return `<polygon points="${points}" class="flowchart-node-shape decision" /><text x="${node.x + 64}" y="${node.y + 32}" text-anchor="middle">${label}</text>`;
+  }
+
+  const rx = node.kind === "process" ? 8 : 28;
+  return `<rect x="${node.x}" y="${node.y}" width="128" height="56" rx="${rx}" class="flowchart-node-shape ${node.kind}" /><text x="${node.x + 64}" y="${node.y + 32}" text-anchor="middle">${label}</text>`;
+}
+
+function renderFlowchartSvg(data: KnowledgeFlowchart) {
+  const normalizedData = normalizeFlowchartData(data);
+  const bounds = getFlowchartBounds(normalizedData);
+  const nodeMap = new Map(normalizedData.nodes.map((node) => [node.id, node]));
+  const edges = normalizedData.edges
+    .map((edge) => {
+      const from = nodeMap.get(edge.from);
+      const to = nodeMap.get(edge.to);
+      if (!from || !to) return "";
+      const start = getFlowchartNodeCenter(from);
+      const end = getFlowchartNodeCenter(to);
+      const labelX = (start.x + end.x) / 2;
+      const labelY = (start.y + end.y) / 2 - 8;
+      return [
+        `<line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" class="flowchart-edge-line" marker-end="url(#flowchart-arrow)" />`,
+        edge.label ? `<text x="${labelX}" y="${labelY}" class="flowchart-edge-label" text-anchor="middle">${escapeHtml(edge.label)}</text>` : ""
+      ].join("");
+    })
+    .join("");
+  const nodes = normalizedData.nodes.map(renderFlowchartNodeSvg).join("");
+
+  return [
+    `<svg viewBox="0 0 ${bounds.width} ${bounds.height}" role="img" aria-label="${escapeHtml(normalizedData.title)}">`,
+    "<defs>",
+    '<marker id="flowchart-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">',
+    '<path d="M0,0 L0,6 L8,3 z" />',
+    "</marker>",
+    "</defs>",
+    edges,
+    nodes,
+    "</svg>"
+  ].join("");
+}
+
+function renderKnowledgeFlowchartHtml(data: KnowledgeFlowchart, blockId: string = crypto.randomUUID()) {
+  const normalizedData = normalizeFlowchartData(data);
+  const encodedData = encodeURIComponent(JSON.stringify(normalizedData));
+  return [
+    `<section class="knowledge-flowchart" contenteditable="false" data-flowchart-id="${escapeHtml(blockId)}" data-flowchart="${encodedData}">`,
+    '<div class="flowchart-heading">',
+    `<strong>${escapeHtml(normalizedData.title)}</strong>`,
+    '<div><button class="flowchart-edit" type="button">编辑</button><button class="flowchart-delete" type="button">删除</button></div>',
+    "</div>",
+    `<div class="flowchart-preview">${renderFlowchartSvg(normalizedData)}</div>`,
+    "</section>",
+    "<p><br></p>"
+  ].join("");
+}
+
+function parseKnowledgeFlowchart(element: Element): KnowledgeFlowchart {
+  try {
+    const encoded = element.getAttribute("data-flowchart");
+    if (!encoded) return createDefaultFlowchart();
+    return normalizeFlowchartData(JSON.parse(decodeURIComponent(encoded)) as KnowledgeFlowchart);
+  } catch {
+    return createDefaultFlowchart();
+  }
 }
 
 function normalizeTag(tag: NonNullable<NodeObj["tags"]>[number]) {
@@ -456,89 +1073,113 @@ function buildNoteEntries(data: MindElixirData): NoteEntry[] {
   return entries;
 }
 
-function App() {
-  const [activeView, setActiveView] = useState<ViewId>("dashboard");
-  const [courses, setCourses] = useState<Course[]>(() => loadCourses());
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [courseStoreReady, setCourseStoreReady] = useState(false);
-  const [courseSaveStatus, setCourseSaveStatus] = useState<CourseSaveStatus>("saved");
-  const latestCoursesRef = useRef(courses);
-
-  useEffect(() => {
-    const handleSaveStatus = (event: Event) => {
-      setCourseSaveStatus((event as CustomEvent<CourseSaveStatus>).detail);
-    };
-
-    window.addEventListener(courseSaveStatusEvent, handleSaveStatus);
-    return () => window.removeEventListener(courseSaveStatusEvent, handleSaveStatus);
-  }, []);
+function useCourseCollectionStore(collection: CourseCollectionConfig) {
+  const [items, setItems] = useState<Course[]>(() => loadCourseCollection(collection));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [storeReady, setStoreReady] = useState(false);
+  const latestItemsRef = useRef(items);
+  const hasLocalMutationRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    loadPersistedCourses()
-      .then((persistedCourses) => {
+    loadPersistedCourseCollection(collection)
+      .then((persistedItems) => {
         if (cancelled) return;
-        const localCourses = loadCourses();
+        if (hasLocalMutationRef.current) return;
+        const localItems = loadCourseCollection(collection);
 
-        if (persistedCourses && persistedCourses.length > 0) {
-          latestCoursesRef.current = persistedCourses;
-          setCourses(persistedCourses);
-        } else if (localCourses.length > 0) {
-          latestCoursesRef.current = localCourses;
-          void window.aistudy?.courses?.save(localCourses);
+        if (persistedItems && persistedItems.length > 0) {
+          latestItemsRef.current = persistedItems;
+          setItems(persistedItems);
+        } else if (localItems.length > 0) {
+          latestItemsRef.current = localItems;
+          void collection.getApi()?.save(localItems);
         }
       })
       .catch((error) => {
-        console.error("Failed to load course database", error);
+        console.error(`Failed to load ${collection.id} database`, error);
       })
       .finally(() => {
-        if (!cancelled) setCourseStoreReady(true);
+        if (!cancelled) setStoreReady(true);
       });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [collection]);
 
   useEffect(() => {
-    latestCoursesRef.current = courses;
-    if (!courseStoreReady) return;
-    return scheduleIdleTask(() => saveCourses(courses), 650);
-  }, [courseStoreReady, courses]);
+    latestItemsRef.current = items;
+    if (!storeReady) return;
+    return scheduleIdleTask(() => saveCourseCollection(collection, items), 650);
+  }, [collection, storeReady, items]);
 
   useEffect(() => {
-    const flushCourses = () => saveCourses(latestCoursesRef.current);
-    window.addEventListener("beforeunload", flushCourses);
-    return () => window.removeEventListener("beforeunload", flushCourses);
-  }, []);
+    const flushItems = () => saveCourseCollection(collection, latestItemsRef.current);
+    window.addEventListener("beforeunload", flushItems);
+    return () => window.removeEventListener("beforeunload", flushItems);
+  }, [collection]);
+
+  const selectedItem = useMemo(
+    () => items.find((item) => item.id === selectedId) ?? null,
+    [items, selectedId]
+  );
+
+  const createItem = useCallback((item: Course) => {
+    hasLocalMutationRef.current = true;
+    setItems((current) => {
+      const nextItems = [item, ...current];
+      latestItemsRef.current = nextItems;
+      saveCourseCollection(collection, nextItems);
+      return nextItems;
+    });
+    setSelectedId(item.id);
+  }, [collection]);
+
+  const updateItem = useCallback((itemId: string, patch: Partial<Course> | ((item: Course) => Partial<Course>)) => {
+    hasLocalMutationRef.current = true;
+    setItems((current) => {
+      const nextItems = current.map((item) =>
+        item.id === itemId
+          ? { ...item, ...(typeof patch === "function" ? patch(item) : patch) }
+          : item
+      );
+      latestItemsRef.current = nextItems;
+      saveCourseCollection(collection, nextItems);
+      return nextItems;
+    });
+  }, [collection]);
+
+  return {
+    items,
+    selectedItem,
+    setSelectedId,
+    clearSelection: () => setSelectedId(null),
+    createItem,
+    updateItem
+  };
+}
+
+function App() {
+  const [activeView, setActiveView] = useState<ViewId>("dashboard");
+  const courseStore = useCourseCollectionStore(courseCollectionIndex.courses);
+  const developerStore = useCourseCollectionStore(courseCollectionIndex.developer);
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const activeCourseCollection = getCourseCollectionByView(activeView);
+  const activeCourseStore = activeCourseCollection?.id === "courses"
+    ? courseStore
+    : activeCourseCollection?.id === "developer"
+      ? developerStore
+      : null;
 
   useEffect(() => {
     return scheduleIdleTask(() => saveSettings(settings), 250);
   }, [settings]);
 
-  const selectedCourse = useMemo(
-    () => courses.find((course) => course.id === selectedCourseId) ?? null,
-    [courses, selectedCourseId]
-  );
-
-  const updateCourse = useCallback((courseId: string, patch: Partial<Course> | ((course: Course) => Partial<Course>)) => {
-    setCourses((current) => {
-      const nextCourses = current.map((course) =>
-        course.id === courseId
-          ? { ...course, ...(typeof patch === "function" ? patch(course) : patch) }
-          : course
-      );
-      latestCoursesRef.current = nextCourses;
-      saveCourses(nextCourses);
-      return nextCourses;
-    });
-  }, []);
-
   return (
     <main className="app-shell">
-      <aside className="sidebar" aria-label="主导航">
+      <aside className="sidebar" aria-label="sidebar">
         <div className="brand">
           <img src={mascotUrl} alt="" />
           <div>
@@ -548,7 +1189,7 @@ function App() {
         </div>
 
         <nav className="nav-list">
-          {navItems.map((item) => {
+          {allNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -556,7 +1197,8 @@ function App() {
                 key={item.id}
                 onClick={() => {
                   setActiveView(item.id);
-                  if (item.id !== "courses") setSelectedCourseId(null);
+                  if (item.id !== courseCollectionIndex.courses.viewId) courseStore.clearSelection();
+                  if (item.id !== courseCollectionIndex.developer.viewId) developerStore.clearSelection();
                 }}
               >
                 <Icon size={18} strokeWidth={2.1} />
@@ -566,7 +1208,7 @@ function App() {
           })}
         </nav>
 
-        <section className="focus-card" aria-label="今日学习状态">
+        <section className="focus-card" aria-label="focus">
           <Sparkles size={18} />
           <div>
             <strong>今日专注</strong>
@@ -578,7 +1220,8 @@ function App() {
           className={activeView === "settings" ? "nav-item settings active" : "nav-item settings"}
           onClick={() => {
             setActiveView("settings");
-            setSelectedCourseId(null);
+            courseStore.clearSelection();
+            developerStore.clearSelection();
           }}
         >
           <Settings size={18} />
@@ -590,14 +1233,16 @@ function App() {
         <header className="topbar">
           <div>
             <h1>
-              {activeView === "courses"
-                ? selectedCourse
-                  ? selectedCourse.title
-                  : "课程中心"
+              {activeCourseCollection && activeCourseStore
+                ? activeCourseStore.selectedItem
+                  ? activeCourseStore.selectedItem.title
+                  : activeCourseCollection.labels.centerTitle
                 : activeView === "updates"
                   ? "更新管理"
-                  : activeView === "mcp"
+                : activeView === "mcp"
                     ? "MCP"
+                  : activeView === "information"
+                    ? "信息搜集"
                   : activeView === "settings"
                     ? "设置"
                   : "学习工作台"}
@@ -614,24 +1259,23 @@ function App() {
           </div>
         </header>
 
-        {activeView === "courses" ? (
+        {activeCourseCollection && activeCourseStore ? (
           <CourseCenter
-            courses={courses}
-            selectedCourse={selectedCourse}
-            onCreateCourse={(course) => {
-              setCourses((current) => [course, ...current]);
-              setSelectedCourseId(course.id);
-            }}
-            onSelectCourse={setSelectedCourseId}
-            onBack={() => setSelectedCourseId(null)}
-            onUpdateCourse={updateCourse}
+            courses={activeCourseStore.items}
+            selectedCourse={activeCourseStore.selectedItem}
+            onCreateCourse={activeCourseStore.createItem}
+            onSelectCourse={activeCourseStore.setSelectedId}
+            onBack={activeCourseStore.clearSelection}
+            onUpdateCourse={activeCourseStore.updateItem}
             settings={settings}
-            saveStatus={courseSaveStatus}
+            labels={activeCourseCollection.labels}
           />
         ) : activeView === "updates" ? (
           <UpdateManager />
         ) : activeView === "mcp" ? (
           <McpPanel />
+        ) : activeView === "information" ? (
+          <InformationCollectionPage />
         ) : activeView === "settings" ? (
           <SettingsPanel
             settings={settings}
@@ -642,6 +1286,540 @@ function App() {
         )}
       </section>
     </main>
+  );
+}
+
+function InformationCollectionPage() {
+  const [activeInformationTab, setActiveInformationTab] = useState<"ports" | "aiDaily">("ports");
+  const [ports, setPorts] = useState<ManagedPortStatus[]>([]);
+  const [isLoadingPorts, setIsLoadingPorts] = useState(false);
+  const [openingPortId, setOpeningPortId] = useState<ManagedPortPlatformId | null>(null);
+  const [startingPortId, setStartingPortId] = useState<ManagedPortPlatformId | null>(null);
+  const [portMessage, setPortMessage] = useState("");
+  const [aiDailySource, setAiDailySource] = useState<AiDailySource>("bilibili");
+  const [aiDailyBvid, setAiDailyBvid] = useState("BV1fPJ76wEYA");
+  const [aiDailyZhihuUrl, setAiDailyZhihuUrl] = useState("");
+  const [aiDailyQuery, setAiDailyQuery] = useState("");
+  const [aiDailyEngine, setAiDailyEngine] = useState<"auto" | "whisper" | "funasr">("auto");
+  const [aiDailyForceTranscribe, setAiDailyForceTranscribe] = useState(false);
+  const [isRunningAiDaily, setIsRunningAiDaily] = useState(false);
+  const [isLoadingAiDaily, setIsLoadingAiDaily] = useState(false);
+  const [aiDailyMessage, setAiDailyMessage] = useState("");
+  const [aiDailyManifest, setAiDailyManifest] = useState<AiDailyManifest | null>(null);
+  const [aiDailyRunResult, setAiDailyRunResult] = useState<AiDailyRunResult | null>(null);
+  const [aiDailyTasks, setAiDailyTasks] = useState<AiDailyAutoTask[]>(() => loadAiDailyAutoTasks());
+  const [aiDailyTaskSource, setAiDailyTaskSource] = useState<AiDailySource>("bilibili");
+  const [aiDailyTaskTarget, setAiDailyTaskTarget] = useState("");
+  const [aiDailyTaskTime, setAiDailyTaskTime] = useState("09:00");
+
+  const loadPortStatuses = useCallback(async () => {
+    setIsLoadingPorts(true);
+    try {
+      const result = await window.aistudy?.ports?.status?.();
+      if (!Array.isArray(result)) {
+        throw new Error("端口接口未就绪");
+      }
+      setPorts((result as ManagedPortStatus[]).sort((a, b) => a.port - b.port));
+      setPortMessage("");
+    } catch (error) {
+      setPortMessage(error instanceof Error ? error.message : "端口状态读取失败");
+    } finally {
+      setIsLoadingPorts(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeInformationTab === "ports") {
+      void loadPortStatuses();
+    }
+  }, [activeInformationTab, loadPortStatuses]);
+
+  const loadAiDailyManifest = useCallback(async () => {
+    setIsLoadingAiDaily(true);
+    try {
+      const result = await window.aistudy?.aiDaily?.latest?.();
+      setAiDailyManifest(result && typeof result === "object" ? result as AiDailyManifest : null);
+      setAiDailyMessage("");
+    } catch (error) {
+      setAiDailyMessage(error instanceof Error ? error.message : "日报状态读取失败");
+    } finally {
+      setIsLoadingAiDaily(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeInformationTab === "aiDaily") {
+      void loadAiDailyManifest();
+    }
+  }, [activeInformationTab, loadAiDailyManifest]);
+
+  const openLoginWindow = async (platformId: ManagedPortPlatformId) => {
+    setOpeningPortId(platformId);
+    try {
+      const result = await window.aistudy?.ports?.openLoginWindow?.(platformId);
+      if (!result || typeof result !== "object") {
+        throw new Error("登录窗口接口未就绪");
+      }
+
+      const payload = result as OpenManagedLoginWindowResult;
+      setPorts((current) => {
+        const next = current.some((port) => port.id === payload.status.id)
+          ? current.map((port) => (port.id === payload.status.id ? payload.status : port))
+          : [...current, payload.status];
+        return next.sort((a, b) => a.port - b.port);
+      });
+      setPortMessage(payload.message);
+    } catch (error) {
+      setPortMessage(error instanceof Error ? error.message : "登录窗口打开失败");
+    } finally {
+      setOpeningPortId(null);
+    }
+  };
+
+  const startPortService = async (platformId: ManagedPortPlatformId) => {
+    setStartingPortId(platformId);
+    try {
+      const result = await window.aistudy?.ports?.startService?.(platformId);
+      if (!result || typeof result !== "object") {
+        throw new Error("端口启动接口未就绪");
+      }
+
+      const payload = result as StartManagedPortServiceResult;
+      setPorts((current) => {
+        const next = current.some((port) => port.id === payload.status.id)
+          ? current.map((port) => (port.id === payload.status.id ? payload.status : port))
+          : [...current, payload.status];
+        return next.sort((a, b) => a.port - b.port);
+      });
+      setPortMessage(payload.message);
+    } catch (error) {
+      setPortMessage(error instanceof Error ? error.message : "端口启动失败");
+    } finally {
+      setStartingPortId(null);
+    }
+  };
+
+  useEffect(() => {
+    saveAiDailyAutoTasks(aiDailyTasks);
+  }, [aiDailyTasks]);
+
+  const addAiDailyTask = () => {
+    const target = aiDailyTaskTarget.trim();
+    if (!target) return;
+    setAiDailyTasks((current) => [
+      {
+        id: crypto.randomUUID(),
+        source: aiDailyTaskSource,
+        target,
+        time: aiDailyTaskTime,
+        enabled: true
+      },
+      ...current
+    ]);
+    setAiDailyTaskTarget("");
+  };
+
+  const toggleAiDailyTask = (taskId: string) => {
+    setAiDailyTasks((current) =>
+      current.map((task) => task.id === taskId ? { ...task, enabled: !task.enabled } : task)
+    );
+  };
+
+  const removeAiDailyTask = (taskId: string) => {
+    setAiDailyTasks((current) => current.filter((task) => task.id !== taskId));
+  };
+
+  const runAiDailyWorkflow = async (task?: AiDailyAutoTask) => {
+    const source = task?.source ?? aiDailySource;
+    const target = task?.target.trim() ?? (source === "zhihu" ? aiDailyZhihuUrl.trim() : aiDailyBvid.trim());
+    setIsRunningAiDaily(true);
+    setAiDailyRunResult(null);
+    try {
+      const result = await window.aistudy?.aiDaily?.run?.({
+        source,
+        bvid: source === "bilibili" ? target : aiDailyBvid,
+        zhihuUrl: source === "zhihu" ? target : aiDailyZhihuUrl,
+        query: aiDailyQuery,
+        engine: aiDailyEngine,
+        forceTranscribe: aiDailyForceTranscribe
+      });
+      if (!result || typeof result !== "object") {
+        throw new Error("AI日报接口未就绪");
+      }
+      const payload = result as AiDailyRunResult;
+      setAiDailyRunResult(payload);
+      setAiDailyManifest(payload.manifest);
+      setAiDailyMessage(task ? `自动任务已执行：${payload.message}` : payload.message);
+    } catch (error) {
+      setAiDailyMessage(error instanceof Error ? error.message : "AI日报生成失败");
+    } finally {
+      setIsRunningAiDaily(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeInformationTab !== "aiDaily") return undefined;
+    const timer = window.setInterval(() => {
+      if (isRunningAiDaily) return;
+      const now = new Date();
+      const currentTime = now.toTimeString().slice(0, 5);
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const dueTask = aiDailyTasks.find((task) => task.enabled && task.time === currentTime && task.lastRunDate !== today);
+      if (!dueTask) return;
+      setAiDailyTasks((current) =>
+        current.map((task) => task.id === dueTask.id ? { ...task, lastRunDate: today } : task)
+      );
+      void runAiDailyWorkflow(dueTask);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [activeInformationTab, aiDailyTasks, isRunningAiDaily]);
+
+  const openAiDailyArtifact = async (filePath?: string) => {
+    if (!filePath) return;
+    try {
+      await window.aistudy?.aiDaily?.openArtifact?.(filePath);
+      setAiDailyMessage("文件已打开");
+    } catch (error) {
+      setAiDailyMessage(error instanceof Error ? error.message : "文件打开失败");
+    }
+  };
+
+  const aiDailyHighlights = Array.isArray(aiDailyManifest?.highlights) ? aiDailyManifest.highlights : [];
+  const aiDailySummary = aiDailyManifest?.summary || aiDailyHighlights[0] || "";
+  const aiDailyManifestSource = aiDailyManifest?.source === "zhihu" ? "zhihu" : "bilibili";
+  const aiDailySourceLabel = aiDailyManifestSource === "zhihu" ? "知乎文章" : "Bilibili";
+  const aiDailyCurrentTarget = aiDailySource === "zhihu" ? aiDailyZhihuUrl.trim() : aiDailyBvid.trim();
+  const aiDailyMetaRows = [
+    [aiDailyManifestSource === "zhihu" ? "文章标题" : "视频标题", aiDailyManifest?.title],
+    [aiDailyManifestSource === "zhihu" ? "作者" : "UP主", aiDailyManifest?.author],
+    [aiDailyManifestSource === "zhihu" ? "知乎链接" : "BV号", aiDailyManifestSource === "zhihu" ? aiDailyManifest?.zhihuUrl : aiDailyManifest?.bvid],
+    ["生成时间", aiDailyManifest?.generatedAt]
+  ].filter(([, value]) => Boolean(value));
+
+  return (
+    <section className="information-collection-page" aria-label="信息搜集">
+      <nav className="information-top-nav" aria-label="信息搜集导航">
+        <button
+          className={activeInformationTab === "ports" ? "active" : ""}
+          type="button"
+          aria-current={activeInformationTab === "ports" ? "page" : undefined}
+          onClick={() => setActiveInformationTab("ports")}
+        >
+          端口管理
+        </button>
+        <button
+          className={activeInformationTab === "aiDaily" ? "active" : ""}
+          type="button"
+          aria-current={activeInformationTab === "aiDaily" ? "page" : undefined}
+          onClick={() => setActiveInformationTab("aiDaily")}
+        >
+          AI日报
+        </button>
+      </nav>
+      {activeInformationTab === "ports" ? (
+        <section className="information-panel port-management-panel" aria-label="端口管理">
+          <header className="port-management-header">
+            <div className="port-management-title">
+              <Sparkles size={18} />
+              <strong>平台登录窗口</strong>
+              <span>{isLoadingPorts ? "检测中" : `${ports.length} 个端口`}</span>
+            </div>
+            <button className="secondary-button port-refresh-button" type="button" onClick={() => void loadPortStatuses()} disabled={isLoadingPorts}>
+              <RotateCcw size={16} />
+              <span>{isLoadingPorts ? "检测中" : "刷新"}</span>
+            </button>
+          </header>
+
+          {portMessage && <p className="port-status-message">{portMessage}</p>}
+
+          <div className="port-card-grid">
+            {ports.map((port) => (
+              <article className={port.ready ? "port-card ready" : "port-card"} key={port.id}>
+                <header className="port-card-header">
+                  <div className="port-card-title">
+                    {port.ready ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}
+                    <div>
+                      <strong>{port.label}</strong>
+                      <span>{port.source}</span>
+                    </div>
+                  </div>
+                  <span className={port.ready ? "port-status-badge ready" : "port-status-badge"}>
+                    {port.ready ? "已连接" : "未启动"}
+                  </span>
+                </header>
+
+                <div className="port-detail-list">
+                  <div className="port-row">
+                    <span>端口</span>
+                    <code>{port.port}</code>
+                  </div>
+                  <div className="port-row">
+                    <span>{port.endpointLabel || "CDP"}</span>
+                    <code title={port.cdpUrl}>{port.cdpUrl}</code>
+                  </div>
+                  <div className="port-row">
+                    <span>Profile</span>
+                    <code title={port.profileDir}>{port.profileReady ? "已创建" : "待创建"}</code>
+                  </div>
+                  <div className="port-row">
+                    <span>当前页</span>
+                    <code title={port.activeUrl || port.error || ""}>
+                      {port.activeTitle || (port.ready ? "Chrome 已连接" : "等待登录窗口")}
+                    </code>
+                  </div>
+                </div>
+
+                <div className="port-card-actions">
+                  {port.canStartService ? (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void startPortService(port.id)}
+                      disabled={startingPortId === port.id}
+                    >
+                      {startingPortId === port.id ? <Clock3 size={16} /> : <RotateCcw size={16} />}
+                      <span>{startingPortId === port.id ? "启动中" : (port.startActionLabel || "启动服务")}</span>
+                    </button>
+                  ) : null}
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void openLoginWindow(port.id)}
+                    disabled={openingPortId === port.id}
+                  >
+                    {openingPortId === port.id ? <Clock3 size={16} /> : <Link2 size={16} />}
+                    <span>{openingPortId === port.id ? "打开中" : (port.loginActionLabel || "打开登录窗口")}</span>
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="information-panel ai-daily-panel" aria-label="AI日报">
+          <header className="ai-daily-header">
+            <div className="ai-daily-title">
+              <FileText size={18} />
+              <strong>视频日报</strong>
+              <span>{isRunningAiDaily ? "生成中" : aiDailyManifest ? "已生成" : "未生成"}</span>
+            </div>
+            <button className="secondary-button port-refresh-button" type="button" onClick={() => void loadAiDailyManifest()} disabled={isLoadingAiDaily || isRunningAiDaily}>
+              <RotateCcw size={16} />
+              <span>{isLoadingAiDaily ? "读取中" : "刷新"}</span>
+            </button>
+          </header>
+
+          {aiDailyMessage && (
+            <p className={aiDailyRunResult?.ok === false ? "ai-daily-message error" : "ai-daily-message"}>
+              {aiDailyMessage}
+            </p>
+          )}
+
+          <div className="ai-daily-layout">
+            <div className="ai-daily-side">
+              <details className="ai-daily-fold ai-daily-settings" open>
+              <summary>
+                <span>生成设置</span>
+                <small>{aiDailyCurrentTarget || "待填写"}</small>
+              </summary>
+              <form
+                className="ai-daily-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void runAiDailyWorkflow();
+                }}
+              >
+                <label>
+                  <span>来源</span>
+                  <select value={aiDailySource} onChange={(event) => setAiDailySource(event.target.value as AiDailySource)}>
+                    <option value="bilibili">Bilibili 视频</option>
+                    <option value="zhihu">知乎文章</option>
+                  </select>
+                </label>
+                {aiDailySource === "zhihu" ? (
+                  <label>
+                    <span>知乎链接</span>
+                    <input value={aiDailyZhihuUrl} onChange={(event) => setAiDailyZhihuUrl(event.target.value)} placeholder="https://zhuanlan.zhihu.com/p/..." />
+                  </label>
+                ) : (
+                  <label>
+                    <span>BV号</span>
+                    <input value={aiDailyBvid} onChange={(event) => setAiDailyBvid(event.target.value)} placeholder="BV1fPJ76wEYA" />
+                  </label>
+                )}
+                <label>
+                  <span>搜索词</span>
+                  <input value={aiDailyQuery} onChange={(event) => setAiDailyQuery(event.target.value)} placeholder="可选" />
+                </label>
+                <label>
+                  <span>转录</span>
+                  <select value={aiDailyEngine} onChange={(event) => setAiDailyEngine(event.target.value as "auto" | "whisper" | "funasr")}>
+                    <option value="auto">自动</option>
+                    <option value="whisper">Whisper</option>
+                    <option value="funasr">FunASR</option>
+                  </select>
+                </label>
+                <label className="ai-daily-check">
+                  <input
+                    type="checkbox"
+                    checked={aiDailyForceTranscribe}
+                    onChange={(event) => setAiDailyForceTranscribe(event.target.checked)}
+                  />
+                  <span>重新转录</span>
+                </label>
+                <button className="primary-button ai-daily-run-button" type="submit" disabled={isRunningAiDaily || !aiDailyCurrentTarget}>
+                  {isRunningAiDaily ? <Clock3 size={16} /> : <PlayCircle size={16} />}
+                  <span>{isRunningAiDaily ? "生成中" : "生成日报"}</span>
+                </button>
+              </form>
+              </details>
+
+              <section className="ai-daily-task-panel" aria-label="自动日报任务">
+                <header className="ai-daily-task-header">
+                  <div>
+                    <strong>自动日报任务</strong>
+                    <span>{aiDailyTasks.filter((task) => task.enabled).length} 个启用</span>
+                  </div>
+                  <Clock3 size={18} />
+                </header>
+
+                <div className="ai-daily-task-form">
+                  <select value={aiDailyTaskSource} onChange={(event) => setAiDailyTaskSource(event.target.value as AiDailySource)} aria-label="任务渠道">
+                    <option value="bilibili">Bilibili</option>
+                    <option value="zhihu">知乎</option>
+                  </select>
+                  <input
+                    value={aiDailyTaskTarget}
+                    onChange={(event) => setAiDailyTaskTarget(event.target.value)}
+                    placeholder={aiDailyTaskSource === "zhihu" ? "知乎文章链接" : "BV号"}
+                    aria-label="任务目标"
+                  />
+                  <input value={aiDailyTaskTime} onChange={(event) => setAiDailyTaskTime(event.target.value)} type="time" aria-label="执行时间" />
+                  <button className="secondary-button" type="button" onClick={addAiDailyTask} disabled={!aiDailyTaskTarget.trim()}>
+                    <Plus size={16} />
+                    <span>添加</span>
+                  </button>
+                </div>
+
+                <div className="ai-daily-task-list">
+                  {aiDailyTasks.length > 0 ? (
+                    aiDailyTasks.map((task) => (
+                      <article className={task.enabled ? "ai-daily-task-row enabled" : "ai-daily-task-row"} key={task.id}>
+                        <label className="ai-daily-task-toggle">
+                          <input type="checkbox" checked={task.enabled} onChange={() => toggleAiDailyTask(task.id)} />
+                          <span>{task.enabled ? "启用" : "暂停"}</span>
+                        </label>
+                        <div>
+                          <strong>{task.source === "zhihu" ? "知乎" : "Bilibili"} · {task.time}</strong>
+                          <span title={task.target}>{task.target}</span>
+                        </div>
+                        <button className="icon-button compact" type="button" aria-label="删除任务" onClick={() => removeAiDailyTask(task.id)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="ai-daily-empty compact">暂无自动任务</div>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <section className="ai-daily-result" aria-label="最近日报">
+              <header className="ai-daily-result-header">
+                <div>
+                  <strong>{aiDailyManifest?.title || "暂无日报"}</strong>
+                  <span>
+                    {aiDailyManifest?.generatedAt || "等待生成"}
+                    {aiDailyManifest?.chunkCount ? ` · ${aiDailyManifest.chunkCount} 个分段` : ""}
+                  </span>
+                </div>
+                {aiDailyRunResult?.ok && <CheckCircle2 size={18} />}
+              </header>
+
+              {aiDailyManifest ? (
+                <div className="ai-daily-fold-list">
+                  <article className="ai-daily-brief-card">
+                    <div className="ai-daily-brief-section">
+                      <div className="ai-daily-brief-heading">
+                        <span>基本信息</span>
+                        <small>{aiDailyManifestSource === "zhihu" ? "知乎" : (aiDailyManifest.bvid || aiDailySourceLabel)}</small>
+                      </div>
+                      <div className="ai-daily-meta-grid">
+                        {aiDailyMetaRows.map(([label, value]) => (
+                          <div className="ai-daily-meta-row" key={label}>
+                            <span>{label}</span>
+                            <strong>{value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="ai-daily-brief-section">
+                      <div className="ai-daily-brief-heading">
+                        <span>内容摘要</span>
+                        <small>{aiDailySummary ? "已整理" : "待生成"}</small>
+                      </div>
+                      {aiDailySummary ? (
+                        <p className="ai-daily-paragraph">{aiDailySummary}</p>
+                      ) : (
+                        <div className="ai-daily-empty compact">暂无摘要</div>
+                      )}
+                    </div>
+
+                    <details className="ai-daily-detail-fold">
+                      <summary>
+                        <span>详情</span>
+                        <small>{aiDailyHighlights.length} 条重点</small>
+                      </summary>
+                      {aiDailyHighlights.length ? (
+                        <ol className="ai-daily-highlights">
+                          {aiDailyHighlights.map((item, index) => (
+                            <li key={`${index}-${item}`}>{item}</li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <div className="ai-daily-empty compact">暂无重点</div>
+                      )}
+                    </details>
+                  </article>
+                </div>
+              ) : (
+                <div className="ai-daily-empty">暂无产物</div>
+              )}
+
+              <div className="ai-daily-artifacts">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void openAiDailyArtifact(aiDailyManifest?.markdownPath)}
+                  disabled={!aiDailyManifest?.markdownPath}
+                >
+                  <FileText size={16} />
+                  <span>Markdown</span>
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void openAiDailyArtifact(aiDailyManifest?.htmlPath)}
+                  disabled={!aiDailyManifest?.htmlPath}
+                >
+                  <Link2 size={16} />
+                  <span>HTML</span>
+                </button>
+              </div>
+
+              {(aiDailyRunResult?.stdout || aiDailyRunResult?.stderr) && (
+                <details className="ai-daily-log">
+                  <summary>运行日志</summary>
+                  <pre>{`${aiDailyRunResult.stdout || ""}${aiDailyRunResult.stderr ? `\n${aiDailyRunResult.stderr}` : ""}`.slice(-4000)}</pre>
+                </details>
+              )}
+            </section>
+          </div>
+        </section>
+      )}
+    </section>
   );
 }
 
@@ -710,9 +1888,9 @@ function SettingsPanel({
           <div className="shortcut-row">
             <div>
               <strong>课程思维导图滑动</strong>
-              <span>方向键控制画布上下左右平移</span>
+              <span>方向键控制画布平移</span>
             </div>
-            <div className="shortcut-keys" aria-label="上下左右方向键">
+            <div className="shortcut-keys" aria-label="arrow keys">
               <kbd>↑</kbd>
               <kbd>↓</kbd>
               <kbd>←</kbd>
@@ -736,81 +1914,232 @@ function SettingsPanel({
 function McpPanel() {
   const [status, setStatus] = useState<McpNotionImportStatus | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
+  const [logs, setLogs] = useState<McpLogEntry[]>([]);
 
-  const refreshStatus = useCallback(() => {
-    setIsChecking(true);
-    void window.aistudy?.mcp
-      ?.notionImportStatus()
-      .then((nextStatus) => setStatus(nextStatus as McpNotionImportStatus))
-      .catch(() => setStatus(null))
-      .finally(() => setIsChecking(false));
+  const appendLog = useCallback((entry: Omit<McpLogEntry, "id" | "time">) => {
+    const now = new Date();
+    setLogs((currentLogs) => [
+      {
+        id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+        time: now.toLocaleTimeString("zh-CN", { hour12: false }),
+        ...entry
+      },
+      ...currentLogs
+    ].slice(0, 18));
   }, []);
 
+  const buildStatusItems = useCallback((nextStatus: McpNotionImportStatus | null): McpStatusItem[] => [
+    {
+      key: "contract",
+      title: "契约",
+      meta: "contract",
+      ready: Boolean(nextStatus?.contractReady),
+      detail: nextStatus?.contractPath ?? "等待检测"
+    },
+    {
+      key: "guide",
+      title: "娴佺▼",
+      meta: "guide",
+      ready: Boolean(nextStatus?.guideReady),
+      detail: nextStatus?.guidePath ?? "等待检测"
+    },
+    {
+      key: "gate",
+      title: "写入规范",
+      meta: "gate",
+      ready: Boolean(nextStatus?.contractReady && nextStatus?.guideReady),
+      detail: "强制规范入口"
+    },
+    {
+      key: "notion",
+      title: "Notion",
+      meta: "cache",
+      ready: Boolean(nextStatus?.notionCacheReady),
+      detail: nextStatus?.notionCachePath ?? "等待检测"
+    },
+    {
+      key: "course-db",
+      title: "课程库",
+      meta: "json",
+      ready: Boolean(nextStatus?.jsonDatabaseReady),
+      detail: nextStatus?.jsonDatabasePath ?? "等待检测"
+    },
+    {
+      key: "mysql",
+      title: "MySQL",
+      meta: "sync",
+      ready: Boolean(nextStatus?.mysqlConnected),
+      detail: "数据库连接"
+    },
+    {
+      key: "backup",
+      title: "备份",
+      meta: "backup",
+      ready: Boolean(nextStatus?.latestBackupReady),
+      detail: nextStatus?.latestBackupPath ?? "暂无备份"
+    }
+  ], []);
+
+  const refreshStatus = useCallback((source: "manual" | "auto" = "manual") => {
+    setIsChecking(true);
+    appendLog({
+      level: "run",
+      title: source === "manual" ? "手动检测" : "自动检测",
+      detail: "刷新 MCP 状态"
+    });
+    void window.aistudy?.mcp
+      ?.notionImportStatus()
+      .then((nextStatus) => {
+        const typedStatus = nextStatus as McpNotionImportStatus;
+        const items = buildStatusItems(typedStatus);
+        const readyCount = items.filter((item) => item.ready).length;
+        const missing = items.filter((item) => !item.ready).map((item) => item.title);
+
+        setStatus(typedStatus);
+        setLastCheckedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
+        appendLog({
+          level: missing.length === 0 ? "ok" : "warn",
+          title: "检测完成",
+          detail: missing.length === 0 ? `${readyCount}/${items.length} 项就绪` : `${readyCount}/${items.length} 项就绪，待处理：${missing.slice(0, 3).join("、")}`
+        });
+      })
+      .catch(() => {
+        setStatus(null);
+        appendLog({
+          level: "warn",
+          title: "检测失败",
+          detail: "MCP 状接口未返回"
+        });
+      })
+      .finally(() => setIsChecking(false));
+  }, [appendLog, buildStatusItems]);
+
   useEffect(() => {
-    refreshStatus();
+    refreshStatus("auto");
+    const timer = window.setInterval(() => refreshStatus("auto"), 8000);
+    return () => window.clearInterval(timer);
   }, [refreshStatus]);
 
+  const statusItems = useMemo(() => buildStatusItems(status), [buildStatusItems, status]);
   const standardReady = Boolean(status?.contractReady && status?.guideReady);
   const accessReady = Boolean(status?.notionCacheReady && status?.jsonDatabaseReady && status?.mysqlConnected);
   const executionReady = Boolean(status?.latestBackupReady);
-  const statusLabel = (ready: boolean) => (isChecking ? "检测中" : ready ? "就绪" : "待处理");
+  const readyCount = statusItems.filter((item) => item.ready).length;
+  const totalCount = statusItems.length;
+  const progress = totalCount > 0 ? Math.round((readyCount / totalCount) * 100) : 0;
+  const phaseItems: McpPhaseItem[] = [
+    {
+      key: "standard",
+      title: "规范",
+      meta: "contract / guide / gate",
+      ready: standardReady,
+      progress: status ? Math.round((Number(status.contractReady) + Number(status.guideReady) + Number(standardReady)) / 3 * 100) : 0,
+      icon: <Braces size={18} />
+    },
+    {
+      key: "access",
+      title: "接入",
+      meta: "Notion / 课程库 / MySQL",
+      ready: accessReady,
+      progress: status ? Math.round((Number(status.notionCacheReady) + Number(status.jsonDatabaseReady) + Number(status.mysqlConnected)) / 3 * 100) : 0,
+      icon: <Link2 size={18} />
+    },
+    {
+      key: "execution",
+      title: "执行",
+      meta: "backup / verify",
+      ready: executionReady,
+      progress: status ? Number(status.latestBackupReady) * 100 : 0,
+      icon: <CheckCircle2 size={18} />
+    }
+  ];
 
   return (
     <section className="mcp-page" aria-label="MCP">
-      <section className="mcp-header-panel">
+      <section className="mcp-hero">
         <div>
-          <span>MCP</span>
-          <h2>模型上下文协议</h2>
+          <span>MCP CONSOLE</span>
+          <h2>模型上下文控制台</h2>
+          <b className={isChecking ? "mcp-live-dot running" : "mcp-live-dot"}>{isChecking ? "检测中" : "持续检测"}</b>
         </div>
-        <button className="primary-button" type="button" onClick={refreshStatus}>
-          <RotateCcw size={18} />
-          <span>{isChecking ? "检测中" : "重新检测"}</span>
-        </button>
+        <div className="mcp-hero-actions">
+          <div className="mcp-hero-metric">
+            <strong>{progress}%</strong>
+            <span>就绪度</span>
+          </div>
+          <div className="mcp-hero-metric">
+            <strong>{readyCount}/{totalCount}</strong>
+            <span>检测项</span>
+          </div>
+          <button className="primary-button" type="button" onClick={() => refreshStatus("manual")} disabled={isChecking}>
+            <RotateCcw size={18} />
+            <span>{isChecking ? "检测中" : "重新检测"}</span>
+          </button>
+        </div>
       </section>
 
-      <section className="mcp-guide">
-        <article className={standardReady ? "mcp-step ready" : "mcp-step"}>
-          <div className="mcp-card-icon">
-            <Braces size={20} />
+      <section className="mcp-console-grid">
+        <section className="mcp-pipeline-panel" aria-label="MCP 执行进度">
+          <div className="mcp-panel-heading">
+            <div>
+              <span>Pipeline</span>
+              <h3>调用进度</h3>
+            </div>
+            <b>{lastCheckedAt ? `更新 ${lastCheckedAt}` : "等待检测"}</b>
           </div>
-          <div>
-            <span>01</span>
-            <strong>规范</strong>
+          <div className="mcp-progress-track" aria-label={`MCP 就绪?${progress}%`}>
+            <span className={isChecking ? "mcp-progress-fill running" : "mcp-progress-fill"} style={{ width: `${progress}%` }} />
           </div>
-          <b>{statusLabel(standardReady)}</b>
-        </article>
+          <div className="mcp-phase-list">
+            {phaseItems.map((phase) => (
+              <article className={phase.ready ? "mcp-phase-row ready" : "mcp-phase-row"} key={phase.key}>
+                <div className="mcp-card-icon">{phase.icon}</div>
+                <div>
+                  <strong>{phase.title}</strong>
+                  <span>{phase.meta}</span>
+                  <div className="mcp-phase-track">
+                    <i style={{ width: `${phase.progress}%` }} />
+                  </div>
+                </div>
+                <b>{phase.ready ? "就绪" : `${phase.progress}%`}</b>
+              </article>
+            ))}
+          </div>
+        </section>
 
-        <article className={accessReady ? "mcp-step ready" : "mcp-step"}>
-          <div className="mcp-card-icon">
-            <Link2 size={20} />
+        <section className="mcp-log-panel" aria-label="MCP 调用日志">
+          <div className="mcp-panel-heading">
+            <div>
+              <span>Log</span>
+              <h3>调用日志</h3>
+            </div>
+            <b>{isChecking ? "写入中" : "实时"}</b>
           </div>
-          <div>
-            <span>02</span>
-            <strong>接入</strong>
+          <div className="mcp-log-list" role="status" aria-live="polite">
+            {(logs.length > 0 ? logs : [{
+              id: "empty",
+              time: "--:--:--",
+              title: "等待检测",
+              detail: "暂无调用记录",
+              level: "run" as const
+            }]).map((log) => (
+              <article className={`mcp-log-entry ${log.level}`} key={log.id}>
+                <time>{log.time}</time>
+                <div>
+                  <strong>{log.title}</strong>
+                  <span>{log.detail}</span>
+                </div>
+              </article>
+            ))}
           </div>
-          <b>{statusLabel(accessReady)}</b>
-        </article>
-
-        <article className={executionReady ? "mcp-step ready" : "mcp-step"}>
-          <div className="mcp-card-icon">
-            <CheckCircle2 size={20} />
-          </div>
-          <div>
-            <span>03</span>
-            <strong>执行</strong>
-          </div>
-          <b>{statusLabel(executionReady)}</b>
-        </article>
+        </section>
       </section>
 
       <section className="mcp-grid">
-        <McpStatusCard title="契约" value={status?.contractReady} meta="contract" />
-        <McpStatusCard title="流程" value={status?.guideReady} meta="guide" />
-        <McpStatusCard title="写入规范" value={standardReady} meta="gate" />
-        <McpStatusCard title="Notion" value={status?.notionCacheReady} meta="cache" />
-        <McpStatusCard title="课程库" value={status?.jsonDatabaseReady} meta="json" />
-        <McpStatusCard title="MySQL" value={status?.mysqlConnected} meta="sync" />
-        <McpStatusCard title="备份" value={status?.latestBackupReady} meta="backup" />
+        {statusItems.map((item) => (
+          <McpStatusCard item={item} key={item.key} />
+        ))}
       </section>
 
       <section className="panel mcp-run-panel">
@@ -818,32 +2147,32 @@ function McpPanel() {
           <div>
             <h3>Notion 知识点导入</h3>
           </div>
-          <CheckCircle2 size={22} />
+          <b className={progress === 100 ? "mcp-run-state ready" : "mcp-run-state"}>{progress === 100 ? "可执行" : "待就绪"}</b>
         </div>
-        <div className="mcp-run-list">
-          <span>读取 Notion</span>
-          <ChevronRight size={16} />
-          <span>标题匹配</span>
-          <ChevronRight size={16} />
-          <span>写入知识点</span>
-          <ChevronRight size={16} />
-          <span>验证落库</span>
+        <div className="mcp-run-rail">
+          {["读取 Notion", "标题匹配", "写入知识点", "验证落库"].map((step, index) => (
+            <React.Fragment key={step}>
+              <span className={index === 0 || progress > index * 25 ? "active" : ""}>{step}</span>
+              {index < 3 && <ChevronRight size={16} />}
+            </React.Fragment>
+          ))}
         </div>
       </section>
     </section>
   );
 }
 
-function McpStatusCard({ title, value, meta }: { title: string; value?: boolean; meta: string }) {
-  const ready = Boolean(value);
+function McpStatusCard({ item }: { item: McpStatusItem }) {
+  const ready = item.ready;
   return (
     <article className={ready ? "mcp-card ready" : "mcp-card"}>
       <div className="mcp-card-icon">
         {ready ? <CheckCircle2 size={20} /> : <Clock3 size={20} />}
       </div>
       <div>
-        <span>{meta}</span>
-        <strong>{title}</strong>
+        <span>{item.meta}</span>
+        <strong>{item.title}</strong>
+        <p title={item.detail}>{item.detail}</p>
       </div>
       <b>{ready ? "就绪" : "待处理"}</b>
     </article>
@@ -935,7 +2264,7 @@ function Dashboard() {
           </div>
           <div className="assistant-input">
             <span>暂无学习数据</span>
-            <button aria-label="发送">
+            <button aria-label="send">
               <ChevronRight size={18} />
             </button>
           </div>
@@ -974,7 +2303,7 @@ function CourseCenter({
   onBack,
   onUpdateCourse,
   settings,
-  saveStatus
+  labels = courseCenterLabels
 }: {
   courses: Course[];
   selectedCourse: Course | null;
@@ -983,7 +2312,7 @@ function CourseCenter({
   onBack: () => void;
   onUpdateCourse: (courseId: string, patch: Partial<Course> | ((course: Course) => Partial<Course>)) => void;
   settings: AppSettings;
-  saveStatus: CourseSaveStatus;
+  labels?: CourseCenterLabels;
 }) {
   if (selectedCourse) {
     return (
@@ -992,7 +2321,7 @@ function CourseCenter({
         onBack={onBack}
         onUpdateCourse={onUpdateCourse}
         settings={settings}
-        saveStatus={saveStatus}
+        labels={labels}
       />
     );
   }
@@ -1003,20 +2332,20 @@ function CourseCenter({
         <div>
           <div className="status-pill">
             <LibraryBig size={15} />
-            <span>已创建 {courses.length} 门课程</span>
+            <span>已创建 {courses.length} {labels.statusCountSuffix}</span>
           </div>
-          <h2>课程与思维导图</h2>
+          <h2>{labels.heroTitle}</h2>
         </div>
       </section>
 
-      <CreateCoursePanel onCreateCourse={onCreateCourse} />
+      <CreateCoursePanel onCreateCourse={onCreateCourse} labels={labels} />
 
-      <section className="course-toolbar" aria-label="课程筛选">
+      <section className="course-toolbar" aria-label="course filter">
         <div className="filter-tabs">
           <button className="filter-tab active">全部</button>
         </div>
         <button className="text-button">
-          管理分类
+          {labels.manageCategory}
           <ChevronRight size={16} />
         </button>
       </section>
@@ -1032,7 +2361,7 @@ function CourseCenter({
                 <div className="course-main">
                   <div className="course-title-row">
                     <div>
-                      <span className="course-category">{course.category || "未分类"}</span>
+                      <span className="course-category">{course.category || labels.categoryFallback}</span>
                       <h3>{course.title}</h3>
                     </div>
                     <button className="icon-button compact" aria-label={`打开 ${course.title}`} onClick={() => onSelectCourse(course.id)}>
@@ -1051,7 +2380,7 @@ function CourseCenter({
               </article>
             ))
           ) : (
-            <EmptyState title="暂无课程" />
+            <EmptyState title={labels.emptyTitle} />
           )}
         </div>
 
@@ -1059,14 +2388,14 @@ function CourseCenter({
           <section className="panel continue-card">
             <div className="panel-heading">
               <div>
-                <h3>继续学习</h3>
+                <h3>{labels.continueTitle}</h3>
               </div>
               <CirclePlay size={21} />
             </div>
-            <strong>{courses[0]?.title ?? "暂无继续学习课程"}</strong>
+            <strong>{courses[0]?.title ?? labels.continueFallback}</strong>
             <button className="primary-button" onClick={() => courses[0] && onSelectCourse(courses[0].id)} disabled={courses.length === 0}>
               <PlayCircle size={18} />
-              <span>进入课程</span>
+              <span>{labels.enterButton}</span>
             </button>
           </section>
 
@@ -1074,13 +2403,13 @@ function CourseCenter({
             <div className="stat-row">
               <UsersRound size={18} />
               <div>
-                <strong>{new Set(courses.map((course) => course.category).filter(Boolean)).size} 个学习方向</strong>
+                <strong>{new Set(courses.map((course) => course.category).filter(Boolean)).size} {labels.statsCategorySuffix}</strong>
               </div>
             </div>
             <div className="stat-row">
               <Clock3 size={18} />
               <div>
-                <strong>本周 0 节待学</strong>
+                <strong>{labels.weeklyMeta}</strong>
               </div>
             </div>
           </section>
@@ -1090,9 +2419,9 @@ function CourseCenter({
   );
 }
 
-function CreateCoursePanel({ onCreateCourse }: { onCreateCourse: (course: Course) => void }) {
+function CreateCoursePanel({ onCreateCourse, labels }: { onCreateCourse: (course: Course) => void; labels: CourseCenterLabels }) {
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("金融");
+  const [category, setCategory] = useState(labels.defaultCategory);
 
   const canCreate = title.trim().length > 0;
 
@@ -1100,41 +2429,36 @@ function CreateCoursePanel({ onCreateCourse }: { onCreateCourse: (course: Course
     <section className="panel create-course-panel">
       <div className="panel-heading">
         <div>
-          <h3>创建课程</h3>
+          <h3>{labels.createTitle}</h3>
         </div>
         <Plus size={21} />
       </div>
       <div className="course-form">
         <label>
-          <span>课程名称</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="金融市场基础知识" />
+          <span>{labels.titleLabel}</span>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={labels.titlePlaceholder} />
         </label>
         <label>
-          <span>分类</span>
-          <input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="金融" />
+          <span>{labels.categoryLabel}</span>
+          <input value={category} onChange={(event) => setCategory(event.target.value)} placeholder={labels.categoryPlaceholder} />
         </label>
         <button
           className="primary-button"
+          type="button"
           disabled={!canCreate}
           onClick={() => {
             if (!canCreate) return;
-            onCreateCourse(createCourse(title.trim(), category.trim(), ""));
+            onCreateCourse(createCourse(title.trim(), category.trim(), "", labels.initialBranchTitle));
             setTitle("");
-            setCategory("金融");
+            setCategory(labels.defaultCategory);
           }}
         >
           <Plus size={18} />
-          <span>创建并编辑导图</span>
+          <span>{labels.createButton}</span>
         </button>
       </div>
     </section>
   );
-}
-
-function getCourseSaveStatusLabel(status: CourseSaveStatus) {
-  if (status === "saving") return "保存中";
-  if (status === "error") return "保存失败";
-  return "已保存";
 }
 
 function CourseDetail({
@@ -1142,46 +2466,40 @@ function CourseDetail({
   onBack,
   onUpdateCourse,
   settings,
-  saveStatus
+  labels
 }: {
   course: Course;
   onBack: () => void;
   onUpdateCourse: (courseId: string, patch: Partial<Course> | ((course: Course) => Partial<Course>)) => void;
   settings: AppSettings;
-  saveStatus: CourseSaveStatus;
+  labels: CourseCenterLabels;
 }) {
   const [workspaceMode, setWorkspaceMode] = useState<CourseWorkspaceMode>("knowledge");
+  const [mindFormatBrush, setMindFormatBrush] = useState<MindFormatBrush | null>(null);
+  const [knowledgeFormatBrush, setKnowledgeFormatBrush] = useState<KnowledgeFormatBrush | null>(null);
+
+  useEffect(() => {
+    setMindFormatBrush(null);
+    setKnowledgeFormatBrush(null);
+  }, [course.id]);
 
   return (
     <>
-      <section className="course-detail-header">
-        <button className="secondary-button" onClick={onBack}>
-          <ChevronLeft size={18} />
-          <span>返回课程中心</span>
-        </button>
-        <div>
-          <span className="course-category">{course.category || "未分类"}</span>
-        </div>
-        <div className={`auto-save-status ${saveStatus}`}>
-          <Save size={18} />
-          <span>{getCourseSaveStatusLabel(saveStatus)}</span>
-        </div>
-      </section>
-
       <section className="mindmap-shell">
         <div className="mindmap-toolbar">
-          <div>
-            <h3>课程工作区</h3>
-          </div>
+          <button className="secondary-button workspace-back-button" onClick={onBack}>
+            <ChevronLeft size={18} />
+            <span>{labels.detailBackLabel}</span>
+          </button>
           <div className="workspace-switch" aria-label="课程功能切换">
             <button className={workspaceMode === "knowledge" ? "active" : ""} onClick={() => setWorkspaceMode("knowledge")}>
-              知识点
+              {labels.switchKnowledge}
             </button>
             <button className={workspaceMode === "notes" ? "active" : ""} onClick={() => setWorkspaceMode("notes")}>
-              知识笔记
+              {labels.switchNotes}
             </button>
             <button className={workspaceMode === "mindmap" ? "active" : ""} onClick={() => setWorkspaceMode("mindmap")}>
-              思维导图
+              {labels.switchMindmap}
             </button>
           </div>
         </div>
@@ -1191,12 +2509,25 @@ function CourseDetail({
           data={course.mindMap}
           mode={workspaceMode}
           knowledgePoints={course.knowledgePoints ?? {}}
+          knowledgeDocuments={course.knowledgeDocuments ?? {}}
           branchMindMaps={course.branchMindMaps ?? {}}
           syncNumberedOutline={course.syncNumberedOutline ?? true}
           numberedOutlineSnapshot={course.numberedOutlineSnapshot ?? buildOutline(course.mindMap)}
+          collapsedOutlineIds={course.collapsedOutlineIds ?? []}
+          hideParentKnowledgePages={course.hideParentKnowledgePages ?? false}
+          mindFormatBrush={mindFormatBrush}
+          onMindFormatBrushChange={setMindFormatBrush}
+          knowledgeFormatBrush={knowledgeFormatBrush}
+          onKnowledgeFormatBrushChange={setKnowledgeFormatBrush}
           onChange={(mindMap) => onUpdateCourse(course.id, { mindMap })}
           onOutlineSyncStateChange={(syncNumberedOutline, numberedOutlineSnapshot) =>
             onUpdateCourse(course.id, { syncNumberedOutline, numberedOutlineSnapshot })
+          }
+          onCollapsedOutlineChange={(collapsedOutlineIds) =>
+            onUpdateCourse(course.id, { collapsedOutlineIds })
+          }
+          onHideParentKnowledgePagesChange={(hideParentKnowledgePages) =>
+            onUpdateCourse(course.id, { hideParentKnowledgePages })
           }
           onBranchMindMapChange={(nodeId, mindMap) =>
             onUpdateCourse(course.id, (currentCourse) => ({
@@ -1214,8 +2545,15 @@ function CourseDetail({
               }
             }))
           }
+          onKnowledgeDocumentChange={(nodeId, document) =>
+            onUpdateCourse(course.id, (currentCourse) => ({
+              knowledgeDocuments: {
+                ...(currentCourse.knowledgeDocuments ?? {}),
+                [nodeId]: document
+              }
+            }))
+          }
           settings={settings}
-          saveStatus={saveStatus}
         />
       </section>
     </>
@@ -1228,30 +2566,48 @@ function MindMapEditor({
   data,
   mode,
   knowledgePoints,
+  knowledgeDocuments,
   branchMindMaps,
   syncNumberedOutline: persistedSyncNumberedOutline,
   numberedOutlineSnapshot: persistedNumberedOutlineSnapshot,
+  collapsedOutlineIds: persistedCollapsedOutlineIds,
+  hideParentKnowledgePages,
   onChange,
   onOutlineSyncStateChange,
+  onCollapsedOutlineChange,
+  onHideParentKnowledgePagesChange,
   onBranchMindMapChange,
   onKnowledgeChange,
-  settings,
-  saveStatus
+  onKnowledgeDocumentChange,
+  mindFormatBrush,
+  onMindFormatBrushChange,
+  knowledgeFormatBrush,
+  onKnowledgeFormatBrushChange,
+  settings
 }: {
   courseId: string;
   title: string;
   data: MindElixirData;
   mode: CourseWorkspaceMode;
   knowledgePoints: Record<string, string>;
+  knowledgeDocuments: Record<string, KnowledgeCanvasDocument>;
   branchMindMaps: Record<string, MindElixirData>;
   syncNumberedOutline: boolean;
   numberedOutlineSnapshot: OutlineItem[];
+  collapsedOutlineIds: string[];
+  hideParentKnowledgePages: boolean;
   onChange: (data: MindElixirData) => void;
   onOutlineSyncStateChange: (syncNumberedOutline: boolean, numberedOutlineSnapshot: OutlineItem[]) => void;
+  onCollapsedOutlineChange: (collapsedOutlineIds: string[]) => void;
+  onHideParentKnowledgePagesChange: (hideParentKnowledgePages: boolean) => void;
   onBranchMindMapChange: (nodeId: string, data: MindElixirData) => void;
   onKnowledgeChange: (nodeId: string, content: string) => void;
+  onKnowledgeDocumentChange: (nodeId: string, document: KnowledgeCanvasDocument) => void;
+  mindFormatBrush: MindFormatBrush | null;
+  onMindFormatBrushChange: (format: MindFormatBrush | null) => void;
+  knowledgeFormatBrush: KnowledgeFormatBrush | null;
+  onKnowledgeFormatBrushChange: (format: KnowledgeFormatBrush | null) => void;
   settings: AppSettings;
-  saveStatus: CourseSaveStatus;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const outlineListRef = useRef<HTMLDivElement | null>(null);
@@ -1270,13 +2626,18 @@ function MindMapEditor({
   const [syncNumberedOutline, setSyncNumberedOutline] = useState(persistedSyncNumberedOutline);
   const [upstreamBranchIsolation, setUpstreamBranchIsolation] = useState(false);
   const [downstreamBranchIsolation, setDownstreamBranchIsolation] = useState(false);
-  const [mindFormatBrush, setMindFormatBrush] = useState<NonNullable<NodeObj["style"]> | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedPageId, setSelectedPageId] = useState(data.nodeData.id);
   const [selectedNodeCount, setSelectedNodeCount] = useState(1);
   const [toolHint, setToolHint] = useState("");
   const [dragMode, setDragMode] = useState(false);
   const [expandedEdit, setExpandedEdit] = useState(false);
+  const [collapsedOutlineIds, setCollapsedOutlineIds] = useState<string[]>(persistedCollapsedOutlineIds);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [aiChatInput, setAiChatInput] = useState("");
+  const [aiChatMessages, setAiChatMessages] = useState<AiChatMessage[]>([]);
+  const [aiChatPending, setAiChatPending] = useState(false);
+  const [aiChatProvider, setAiChatProvider] = useState<AiChatProvider>("claude");
   const [draggingOutlineId, setDraggingOutlineId] = useState<string | null>(null);
   const [outlineDropTargetId, setOutlineDropTargetId] = useState<string | null>(null);
   const [outlineScroll, setOutlineScroll] = useState(0);
@@ -1392,6 +2753,20 @@ function MindMapEditor({
     onBranchMindMapChangeRef.current(nodeId, savedData);
   };
 
+  const fitMindMapViewport = (mind: MindElixirInstance, focusId?: string) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const targetNode = focusId ? mind.findEle(focusId) : mind.findEle(mind.nodeData.id);
+        if (targetNode) {
+          mind.selectNode(targetNode);
+          mind.scrollIntoView(targetNode, true);
+        }
+        mind.scaleFit();
+        mind.toCenter();
+      });
+    });
+  };
+
   const persistCurrentCanvasBeforeNavigation = () => {
     const mind = mindRef.current;
     if (!mind) return;
@@ -1423,8 +2798,7 @@ function MindMapEditor({
       if (!topic) return;
       mind.selectNode(topic);
       if (targetId === nextData.nodeData.id) {
-        mind.scrollIntoView(topic, true);
-        mind.toCenter();
+        fitMindMapViewport(mind, targetId);
       } else {
         mind.focusNode(topic);
         mind.scrollIntoView(topic, true);
@@ -1444,9 +2818,7 @@ function MindMapEditor({
     requestAnimationFrame(() => {
       const rootNode = mind.findEle(branchData.nodeData.id);
       if (!rootNode) return;
-      mind.selectNode(rootNode);
-      mind.scrollIntoView(rootNode, true);
-      mind.toCenter();
+      fitMindMapViewport(mind, branchData.nodeData.id);
     });
     return true;
   };
@@ -1494,8 +2866,9 @@ function MindMapEditor({
         ? nextOutline
         : applyNumberedOutlineSnapshot(nextOutline, nextSnapshot)
     );
+    setCollapsedOutlineIds(persistedCollapsedOutlineIds);
     setNoteEntries(buildNoteEntries(data));
-  }, [courseId, data.nodeData.id, persistedSyncNumberedOutline, persistedNumberedOutlineSnapshot]);
+  }, [courseId, data.nodeData.id, persistedSyncNumberedOutline, persistedNumberedOutlineSnapshot, persistedCollapsedOutlineIds]);
 
   useEffect(() => {
     if (!shouldMountMindMap) return;
@@ -1519,6 +2892,7 @@ function MindMapEditor({
     const initialData = mind.getData();
     refreshOutlineViews(initialData);
     setSelectedNodeId(mind.nodeData.id);
+    fitMindMapViewport(mind, mind.nodeData.id);
 
     mind.bus.addListener("operation", () => {
       const nextData = mind.getData();
@@ -1596,6 +2970,7 @@ function MindMapEditor({
       mind.selectNode(rootNode);
       mind.scrollIntoView(rootNode, true);
     }
+    mind.scaleFit();
     mind.toCenter();
     const nextData = mind.getData();
     persistCurrentMindData(nextData);
@@ -1653,10 +3028,10 @@ function MindMapEditor({
 
     if (nextIsolationState) {
       if (activePageId !== rootNodeId && openIsolatedBranchMindMap(activePageId)) {
-        setToolHint("上分支隔离已开启：当前分支不会回写上级导图");
+        setToolHint("上分支隔离已弢启：当前分支不会回写上级导图");
         return;
       }
-      setToolHint("上分支隔离已开启：选择子分支后生效");
+      setToolHint("上分支隔离已弢启：选择子分支后生效");
       return;
     }
 
@@ -1669,7 +3044,7 @@ function MindMapEditor({
     downstreamBranchIsolationRef.current = nextIsolationState;
     setDownstreamBranchIsolation(nextIsolationState);
     setToolHint(nextIsolationState
-      ? "下分支隔离已开启：下级分支导图不再跟随当前分支"
+      ? "下分支隔离已弢启：下级分支导图不再跟随当前分支"
       : "下分支隔离已关闭：下级分支导图将跟随当前分支"
     );
   };
@@ -1770,7 +3145,7 @@ function MindMapEditor({
   const copyMindNodeFormat = () => {
     const node = getActiveNode();
     if (!node) return;
-    setMindFormatBrush({ ...(node.nodeObj.style ?? {}) });
+    onMindFormatBrushChange({ ...(node.nodeObj.style ?? {}) });
     setToolHint("导图格式已复制");
   };
 
@@ -1783,6 +3158,7 @@ function MindMapEditor({
     await runWithActiveNode((mind, node) => {
       return mind.reshapeNode(node, { style: { ...mindFormatBrush } });
     });
+    onMindFormatBrushChange(null);
     setToolHint("导图格式已应用");
   };
 
@@ -1919,7 +3295,7 @@ function MindMapEditor({
         target?.tagName === "TEXTAREA" ||
         target?.isContentEditable;
 
-      // 在文本输入框内不处理（允许正常删除字符）
+      // 在文本输入框内不处理，允许正常删除字符
       if (isTextInput) return;
 
       // Delete 或 Backspace 键删除分支
@@ -2030,7 +3406,7 @@ function MindMapEditor({
     const deltaX = event.clientX - resizeState.startX;
     const newWidth = Math.min(500, Math.max(180, resizeState.startWidth + deltaX));
     outline.style.width = `${newWidth}px`;
-    // 更新 CSS 变量，让右边区域自适应
+    // 更新 CSS 变量，让右侧区域自适应
     document.documentElement.style.setProperty('--outline-width', `${newWidth}px`);
   };
 
@@ -2048,9 +3424,156 @@ function MindMapEditor({
   const isRootSelected = activeEditNodeId === canvasRootNodeId;
   const canUseMultiNodeTool = selectedNodeCount >= 2;
   const activeKnowledge = knowledgePoints[activePageId] ?? "";
+  const activeKnowledgeDocument = knowledgeDocuments[activePageId] ?? null;
   const activeBranchNode = branchMindMaps[activePageId]?.nodeData ?? findMindMapNode(data.nodeData, activePageId);
   const activeOutlineItem = outline.find((item) => item.id === activePageId);
   const activeTopic = activeBranchNode?.topic ?? activeOutlineItem?.topic ?? title;
+  const outlineParentIds = useMemo(() => getOutlineParentIds(outline), [outline]);
+  const visibleOutline = useMemo(() => getVisibleOutline(outline, collapsedOutlineIds), [outline, collapsedOutlineIds]);
+  const isKnowledgePageSelectable = (pageId: string) => !hideParentKnowledgePages || !outlineParentIds.has(pageId);
+  const knowledgeContentPageIds = useMemo(
+    () =>
+      outline
+        .filter((item) => hasKnowledgeContent(knowledgePoints[item.id]) && (!hideParentKnowledgePages || !outlineParentIds.has(item.id)))
+        .map((item) => item.id),
+    [hideParentKnowledgePages, knowledgePoints, outline, outlineParentIds]
+  );
+  const knowledgeContentPageIdSet = useMemo(() => new Set(knowledgeContentPageIds), [knowledgeContentPageIds]);
+  const activeOutlineIndex = outline.findIndex((item) => item.id === activePageId);
+  const previousKnowledgePageId = (() => {
+    if (activeOutlineIndex <= 0) return null;
+    for (let index = activeOutlineIndex - 1; index >= 0; index -= 1) {
+      const candidateId = outline[index]?.id;
+      if (candidateId && knowledgeContentPageIdSet.has(candidateId)) return candidateId;
+    }
+    return null;
+  })();
+  const nextKnowledgePageId = (() => {
+    const startIndex = activeOutlineIndex >= 0 ? activeOutlineIndex + 1 : 0;
+    for (let index = startIndex; index < outline.length; index += 1) {
+      const candidateId = outline[index]?.id;
+      if (candidateId && knowledgeContentPageIdSet.has(candidateId)) return candidateId;
+    }
+    return null;
+  })();
+  const getKnowledgePageTitle = (pageId: string | null) => {
+    if (!pageId) return null;
+    return outline.find((item) => item.id === pageId)?.topic ?? null;
+  };
+  const findFirstSelectableDescendant = (itemId: string) => {
+    const startIndex = outline.findIndex((item) => item.id === itemId);
+    if (startIndex < 0) return null;
+    const parentDepth = outline[startIndex].depth;
+    for (let index = startIndex + 1; index < outline.length; index += 1) {
+      const candidate = outline[index];
+      if (candidate.depth <= parentDepth) break;
+      if (isKnowledgePageSelectable(candidate.id)) return candidate.id;
+    }
+    return null;
+  };
+  const handleHideParentKnowledgePagesChange = () => {
+    const nextValue = !hideParentKnowledgePages;
+    onHideParentKnowledgePagesChange(nextValue);
+    if (!nextValue || !outlineParentIds.has(activePageId)) return;
+    const nextPageId = findFirstSelectableDescendant(activePageId);
+    if (nextPageId) focusOutlineNode(nextPageId);
+  };
+
+  const toggleOutlineCollapse = (itemId: string) => {
+    const isCollapsed = collapsedOutlineIds.includes(itemId);
+    const nextIds = isCollapsed
+      ? collapsedOutlineIds.filter((id) => id !== itemId)
+      : [...collapsedOutlineIds, itemId];
+    setCollapsedOutlineIds(nextIds);
+    onCollapsedOutlineChange(nextIds);
+  };
+
+  const buildAiSystemContextMessage = (systemContext: SystemContextInfo) => {
+    const readmeContent = systemContext.docs?.readmeContent?.trim();
+
+    return [
+      `当前课程：${title}`,
+      `当前知识点：${activeTopic}`,
+      "边界：只处理当前课程当前知识点。",
+      "",
+      "【系统 README】",
+      readmeContent || "README 未读取到，请以运行与存储信息为准。"
+    ].join("\n");
+  };
+
+  const sendAiChatText = async (rawMessage: string) => {
+    const message = rawMessage.trim();
+    if (!message || aiChatPending) return;
+
+    const userMessage: AiChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: message
+    };
+    setAiChatMessages((current) => [...current, userMessage]);
+    setAiChatInput("");
+    setAiChatPending(true);
+
+    try {
+      const result = (await window.aistudy?.ai?.chat({
+        courseId,
+        courseTitle: title,
+        nodeId: activePageId,
+        nodeTitle: activeTopic,
+        message,
+        knowledgeHtml: activeKnowledge,
+        outline,
+        provider: aiChatProvider
+      })) as AiChatResult | undefined;
+
+      if (typeof result?.updatedKnowledgeHtml === "string") {
+        onKnowledgeChange(activePageId, result.updatedKnowledgeHtml);
+      }
+
+      setAiChatMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: result?.reply || (result?.applied ? "已更新" : "已完成")
+        }
+      ]);
+    } catch (error) {
+      setAiChatMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: (error as Error).message || "处理失败"
+        }
+      ]);
+    } finally {
+      setAiChatPending(false);
+    }
+  };
+
+  const sendAiChatMessage = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await sendAiChatText(aiChatInput);
+  };
+
+  const sendAiSystemContext = async () => {
+    if (aiChatPending) return;
+
+    try {
+      const systemContext = (await window.aistudy?.ai?.systemContext?.()) as SystemContextInfo | undefined;
+      await sendAiChatText(buildAiSystemContextMessage(systemContext ?? {}));
+    } catch (error) {
+      setAiChatMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: (error as Error).message || "系统信息读取失败"
+        }
+      ]);
+    }
+  };
 
   return (
     <div className="mindmap-editor-layout">
@@ -2071,18 +3594,27 @@ function MindMapEditor({
             >
               主思维导图
             </button>
-            {outline.map((item) => (
-              <button
+            {visibleOutline.map((item) => {
+              const hasChildren = outlineParentIds.has(item.id);
+              const isCollapsed = collapsedOutlineIds.includes(item.id);
+
+              return (
+              <div
                 className={[
                   "outline-item",
                   `depth-${Math.min(item.depth, 5)}`,
                   item.numbering ? "has-numbering" : "",
+                  hasChildren ? "has-children" : "",
+                  hideParentKnowledgePages && hasChildren ? "knowledge-page-disabled" : "",
+                  isCollapsed ? "collapsed" : "",
                   activePageId === item.id ? "active" : "",
                   draggingOutlineId === item.id ? "dragging" : "",
                   outlineDropTargetId === item.id ? "drop-target" : ""
                 ].filter(Boolean).join(" ")}
                 draggable
                 key={item.id}
+                role="button"
+                tabIndex={0}
                 onDragEnd={() => {
                   setDraggingOutlineId(null);
                   setOutlineDropTargetId(null);
@@ -2108,13 +3640,48 @@ function MindMapEditor({
                   setOutlineDropTargetId(null);
                   if (draggedId) reorderOutlineNode(draggedId, item.id);
                 }}
-                onClick={() => focusOutlineNode(item.id)}
+                onClick={() => {
+                  if (hideParentKnowledgePages && hasChildren) {
+                    toggleOutlineCollapse(item.id);
+                    return;
+                  }
+                  focusOutlineNode(item.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  if (hideParentKnowledgePages && hasChildren) {
+                    toggleOutlineCollapse(item.id);
+                    return;
+                  }
+                  focusOutlineNode(item.id);
+                }}
+                title={hideParentKnowledgePages && hasChildren ? "父级知识点页已关闭" : item.topic}
                 style={{ paddingLeft: `${8 + item.depth * 22 + (item.depth >= 3 ? 16 : 0)}px` }}
               >
+                {hasChildren ? (
+                  <button
+                    className="outline-collapse-toggle"
+                    type="button"
+                    title={isCollapsed ? "展开下级目录" : "折叠下级目录"}
+                    aria-label={isCollapsed ? "展开下级目录" : "折叠下级目录"}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleOutlineCollapse(item.id);
+                    }}
+                    onDragStart={(event) => event.preventDefault()}
+                  >
+                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                ) : (
+                  <span className="outline-collapse-spacer" aria-hidden="true" />
+                )}
                 {item.numbering && <span className="outline-numbering">{item.numbering}</span>}
                 <span className="outline-topic">{item.topic}</span>
-              </button>
-            ))}
+              </div>
+              );
+            })}
           </div>
           <div className="outline-scroll-control" aria-label="目录上下滑动">
             <button type="button" title="向上滑动目录" onClick={() => scrollOutlineBy(-128)}>
@@ -2144,15 +3711,110 @@ function MindMapEditor({
       </aside>
       <div className="mindmap-stage">
         {mode === "knowledge" && (
-          <KnowledgePanel
-            key={activePageId}
+          <CanvasKnowledgePanel
             nodeId={activePageId}
             topic={activeTopic}
             value={activeKnowledge}
+            document={activeKnowledgeDocument}
             branchNode={activeBranchNode}
+            knowledgeFormatBrush={knowledgeFormatBrush}
+            onKnowledgeFormatBrushChange={onKnowledgeFormatBrushChange}
             onKnowledgeChange={onKnowledgeChange}
-            saveStatus={saveStatus}
+            onKnowledgeDocumentChange={onKnowledgeDocumentChange}
+            onNavigateNextKnowledgePage={nextKnowledgePageId ? () => focusOutlineNode(nextKnowledgePageId) : null}
+            onNavigatePreviousKnowledgePage={previousKnowledgePageId ? () => focusOutlineNode(previousKnowledgePageId) : null}
+            nextKnowledgePageTitle={getKnowledgePageTitle(nextKnowledgePageId)}
+            previousKnowledgePageTitle={getKnowledgePageTitle(previousKnowledgePageId)}
+            hideParentKnowledgePages={hideParentKnowledgePages}
+            onToggleParentKnowledgePages={handleHideParentKnowledgePagesChange}
           />
+        )}
+
+        {mode === "knowledge" && (
+          <div className={aiChatOpen ? "ai-chat-widget open" : "ai-chat-widget"}>
+            <button
+              className="ai-chat-launcher"
+              type="button"
+              aria-label="AI"
+              onClick={() => setAiChatOpen((current) => !current)}
+            >
+              <img src={mascotUrl} alt="" />
+            </button>
+            {aiChatOpen && (
+              <section className="ai-chat-panel" aria-label="AI">
+                <header>
+                  <img src={mascotUrl} alt="" />
+                  <div className="ai-chat-provider" role="group" aria-label="model">
+                    <button
+                      type="button"
+                      className={aiChatProvider === "claude" ? "active" : ""}
+                      disabled={aiChatPending}
+                      onClick={() => setAiChatProvider("claude")}
+                    >
+                      Claude
+                    </button>
+                    <button
+                      type="button"
+                      className={aiChatProvider === "mimo" ? "active" : ""}
+                      disabled={aiChatPending}
+                      onClick={() => setAiChatProvider("mimo")}
+                    >
+                      Mimo
+                    </button>
+                    <button
+                      type="button"
+                      className={aiChatProvider === "doubao" ? "active" : ""}
+                      disabled={aiChatPending}
+                      onClick={() => setAiChatProvider("doubao")}
+                    >
+                      Doubao
+                    </button>
+                    <button
+                      type="button"
+                      className={aiChatProvider === "chatgpt" ? "active" : ""}
+                      disabled={aiChatPending}
+                      onClick={() => setAiChatProvider("chatgpt")}
+                    >
+                      ChatGPT
+                    </button>
+                  </div>
+                  <button type="button" aria-label="关闭" onClick={() => setAiChatOpen(false)}>
+                    <X size={16} />
+                  </button>
+                </header>
+                <div className="ai-chat-messages">
+                  {aiChatMessages.map((message) => (
+                    <div className={`ai-chat-bubble ${message.role}`} key={message.id}>
+                      {message.content}
+                    </div>
+                  ))}
+                  {aiChatPending && (
+                    <div className="ai-chat-bubble assistant pending">
+                      <span className="ai-chat-spinner" aria-label="loading" />
+                    </div>
+                  )}
+                </div>
+                <div className="ai-chat-quick-actions">
+                  <button type="button" disabled={aiChatPending} onClick={sendAiSystemContext}>
+                    <FileText size={14} />
+                    <span>系统信息</span>
+                  </button>
+                </div>
+                <form className="ai-chat-input" onSubmit={sendAiChatMessage}>
+                  <input
+                    aria-label="input"
+                    disabled={aiChatPending}
+                    onChange={(event) => setAiChatInput(event.target.value)}
+                    placeholder="输入..."
+                    value={aiChatInput}
+                  />
+                  <button type="submit" aria-label="send" disabled={aiChatPending || !aiChatInput.trim()}>
+                    <Sparkles size={16} />
+                  </button>
+                </form>
+              </section>
+            )}
+          </div>
         )}
 
         {mode === "notes" && (
@@ -2334,11 +3996,16 @@ function MindMapEditor({
                   className={mindFormatBrush ? "active" : ""}
                   title={mindFormatBrush ? "应用导图格式" : "复制导图格式"}
                   onClick={applyMindNodeFormat}
-                  onDoubleClick={() => setMindFormatBrush(null)}
+                  onDoubleClick={() => onMindFormatBrushChange(null)}
                 >
                   <Paintbrush size={16} />
                   <span>格式刷</span>
                 </button>
+                {mindFormatBrush && (
+                  <button title="关闭导图格式刷" onClick={() => onMindFormatBrushChange(null)}>
+                    <X size={16} />
+                  </button>
+                )}
                 <div className="swatch-set" aria-label="文字颜色">
                   <Palette size={15} />
                   {textColors.map((color) => (
@@ -2351,14 +4018,14 @@ function MindMapEditor({
                     />
                   ))}
                 </div>
-                <div className="swatch-set" aria-label="背景色">
+                <div className="swatch-set" aria-label="background color">
                   <PaintBucket size={15} />
                   {fillColors.map((color) => (
                     <button
                       className="color-swatch fill"
                       key={color}
                       style={{ "--swatch-color": color } as React.CSSProperties}
-                      title={`背景色 ${color}`}
+                      title={`鑳屾櫙鑹?${color}`}
                       onClick={() => updateActiveNodeStyle({ background: color })}
                     />
                   ))}
@@ -2477,8 +4144,7 @@ const knowledgeInlineStyleProperties = [
 
 const knowledgeBlockStyleProperties = [
   "textAlign",
-  "lineHeight",
-  "letterSpacing",
+  "textIndent",
   "marginLeft",
   "paddingLeft"
 ];
@@ -2495,6 +4161,24 @@ function readStyleValue(style: CSSStyleDeclaration, property: string) {
 function writeStyleValue(style: CSSStyleDeclaration, property: string, value: string) {
   if (!value) return;
   style.setProperty(property.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`), value);
+}
+
+function clearStyleValue(style: CSSStyleDeclaration, property: string) {
+  style.removeProperty(property.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`));
+}
+
+function getTextDecorationParts(value: string) {
+  if (!value || value === "none") return [];
+  return value.split(/\s+/).filter((item) => item === "underline" || item === "line-through");
+}
+
+function formatTextDecorationParts(parts: string[]) {
+  const uniqueParts = Array.from(new Set(parts));
+  return uniqueParts.length > 0 ? uniqueParts.join(" ") : "none";
+}
+
+function addTextDecorationPart(value: string, part: "underline" | "line-through") {
+  return formatTextDecorationParts([...getTextDecorationParts(value), part]);
 }
 
 function copyKnowledgeElementStyles(source: HTMLElement, target: HTMLElement) {
@@ -2522,6 +4206,159 @@ function convertLegacyFontTags(root: HTMLElement) {
   });
 }
 
+function getInlineStyleSnapshot(element: HTMLElement, inherited: Record<string, string>) {
+  const styles = { ...inherited };
+
+  knowledgeInlineStyleProperties.forEach((property) => {
+    const value = readStyleValue(element.style, property).trim();
+    if (value) styles[property] = value;
+  });
+
+  const tagName = element.tagName;
+  if (tagName === "B" || tagName === "STRONG") styles.fontWeight = "800";
+  if (tagName === "I" || tagName === "EM") styles.fontStyle = "italic";
+  if (tagName === "U") styles.textDecorationLine = addTextDecorationPart(styles.textDecorationLine ?? "", "underline");
+  if (tagName === "S" || tagName === "STRIKE") {
+    styles.textDecorationLine = addTextDecorationPart(styles.textDecorationLine ?? "", "line-through");
+  }
+
+  Object.keys(styles).forEach((key) => {
+    if (
+      !styles[key] ||
+      styles[key] === "normal" ||
+      styles[key] === "initial" ||
+      (key === "textDecorationLine" && styles[key] === "none")
+    ) {
+      delete styles[key];
+    }
+  });
+
+  return styles;
+}
+
+function inlineStyleSignature(styles: Record<string, string>) {
+  return knowledgeInlineStyleProperties
+    .map((property) => {
+      const value = styles[property];
+      return value ? `${property}:${value}` : "";
+    })
+    .filter(Boolean)
+    .join(";");
+}
+
+function applyInlineStyleSnapshot(element: HTMLElement, styles: Record<string, string>) {
+  knowledgeInlineStyleProperties.forEach((property) => {
+    const value = styles[property];
+    if (value) writeStyleValue(element.style, property, value);
+  });
+}
+
+function isFontWeightBoldValue(value: string) {
+  const fontWeight = Number.parseInt(value, 10);
+  return value === "bold" || (!Number.isNaN(fontWeight) && fontWeight >= 600);
+}
+
+function getStyleDelta(styles: Record<string, string>, baseStyles: Record<string, string>) {
+  const delta: Record<string, string> = {};
+  knowledgeInlineStyleProperties.forEach((property) => {
+    const value = styles[property];
+    const baseValue = baseStyles[property];
+    if (property === "fontWeight" && !isFontWeightBoldValue(baseValue ?? "") && (value === "400" || value === "normal")) {
+      return;
+    }
+    if (property === "fontStyle" && !baseValue && value === "normal") return;
+    if (property === "textDecorationLine" && !baseValue && value === "none") return;
+    if (property === "color" && !baseValue && value === "inherit") return;
+    if (property === "backgroundColor" && !baseValue && (value === "transparent" || value === "rgba(0, 0, 0, 0)")) {
+      return;
+    }
+    if ((property === "fontFamily" || property === "fontSize") && !baseValue && value === "inherit") return;
+    if (value && value !== baseStyles[property]) delta[property] = value;
+  });
+  return delta;
+}
+
+function appendInlineText(
+  target: ParentNode,
+  text: string,
+  styles: Record<string, string>,
+  baseStyles: Record<string, string>
+) {
+  if (!text) return;
+  const styleDelta = getStyleDelta(styles, baseStyles);
+  const signature = inlineStyleSignature(styleDelta);
+  if (!signature) {
+    target.appendChild(document.createTextNode(text));
+    return;
+  }
+
+  const lastChild = target.lastChild;
+  if (
+    lastChild instanceof HTMLSpanElement &&
+    (lastChild.dataset.styleSignature ?? "") === signature
+  ) {
+    lastChild.appendChild(document.createTextNode(text));
+    return;
+  }
+
+  const span = document.createElement("span");
+  span.dataset.styleSignature = signature;
+  applyInlineStyleSnapshot(span, styleDelta);
+  span.appendChild(document.createTextNode(text));
+  target.appendChild(span);
+}
+
+function appendSimplifiedInline(
+  node: Node,
+  target: ParentNode,
+  inheritedStyles: Record<string, string>,
+  baseStyles: Record<string, string>
+) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    appendInlineText(target, node.textContent ?? "", inheritedStyles, baseStyles);
+    return;
+  }
+
+  if (!(node instanceof HTMLElement)) return;
+
+  if (node.tagName === "BR") {
+    target.appendChild(document.createElement("br"));
+    return;
+  }
+
+  const nextStyles = getInlineStyleSnapshot(node, inheritedStyles);
+  node.childNodes.forEach((child) => appendSimplifiedInline(child, target, nextStyles, baseStyles));
+}
+
+function trimBlockBoundaryWhitespace(fragment: DocumentFragment) {
+  const textNodes: Text[] = [];
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    if (walker.currentNode instanceof Text) textNodes.push(walker.currentNode);
+  }
+
+  const firstText = textNodes[0];
+  if (firstText) firstText.textContent = (firstText.textContent ?? "").replace(/^[\s\u00a0]+/, "");
+
+  const lastText = textNodes[textNodes.length - 1];
+  if (lastText) lastText.textContent = (lastText.textContent ?? "").replace(/[\s\u00a0]+$/, "");
+
+  textNodes.forEach((textNode) => {
+    if ((textNode.textContent ?? "").length === 0) textNode.remove();
+  });
+}
+
+function simplifyInlineChildren(element: HTMLElement) {
+  const fragment = document.createDocumentFragment();
+  const baseStyles = getInlineStyleSnapshot(element, {});
+  element.childNodes.forEach((child) => appendSimplifiedInline(child, fragment, baseStyles, baseStyles));
+  trimBlockBoundaryWhitespace(fragment);
+  element.replaceChildren(fragment);
+  element.querySelectorAll("span[data-style-signature]").forEach((span) => {
+    delete (span as HTMLElement).dataset.styleSignature;
+  });
+}
+
 function normalizeKnowledgeHtml(rawHtml: string) {
   if (rawHtml.length === 0) return "";
 
@@ -2533,7 +4370,7 @@ function normalizeKnowledgeHtml(rawHtml: string) {
 
   const hasVisibleOrIntentionalContent = (element: HTMLElement) =>
     element.textContent !== "" ||
-    element.querySelectorAll("br, img, table, ul, ol, .knowledge-branch-map").length > 0;
+    element.querySelectorAll("br, img, table, ul, ol, .knowledge-branch-map, .knowledge-flowchart").length > 0;
 
   const appendParagraph = (preserveEmpty = false) => {
     if (!hasVisibleOrIntentionalContent(paragraph)) {
@@ -2545,6 +4382,7 @@ function normalizeKnowledgeHtml(rawHtml: string) {
       return;
     }
 
+    simplifyInlineChildren(paragraph);
     output.appendChild(paragraph);
     paragraph = document.createElement("p");
   };
@@ -2566,7 +4404,7 @@ function normalizeKnowledgeHtml(rawHtml: string) {
       return;
     }
 
-    if (node.classList.contains("knowledge-branch-map")) {
+    if (node.classList.contains("knowledge-branch-map") || node.classList.contains("knowledge-flowchart")) {
       appendParagraph();
       output.appendChild(node.cloneNode(true));
       return;
@@ -2577,6 +4415,7 @@ function normalizeKnowledgeHtml(rawHtml: string) {
       const nextParagraph = document.createElement("p");
       copyKnowledgeElementStyles(node, nextParagraph);
       nextParagraph.innerHTML = node.innerHTML;
+      simplifyInlineChildren(nextParagraph);
       paragraph = nextParagraph;
       appendParagraph(node.innerHTML === "" || node.innerHTML === "<br>");
       return;
@@ -2584,7 +4423,11 @@ function normalizeKnowledgeHtml(rawHtml: string) {
 
     if (node.tagName === "UL" || node.tagName === "OL") {
       appendParagraph();
-      output.appendChild(node.cloneNode(true));
+      const list = node.cloneNode(true);
+      if (list instanceof HTMLElement) {
+        list.querySelectorAll("li").forEach((item) => simplifyInlineChildren(item));
+      }
+      output.appendChild(list);
       return;
     }
 
@@ -2595,24 +4438,837 @@ function normalizeKnowledgeHtml(rawHtml: string) {
   return output.innerHTML;
 }
 
+const canvasKnowledgeHtmlInnerWidth = 980;
+const canvasKnowledgeDocumentVersion = 2;
+const canvasKnowledgeDefaultLetterSpacing = 0;
+const canvasKnowledgeDefaultRowMargin = 1.2;
+const canvasKnowledgeExtraPickAttrs: Array<keyof IElement> = ["letterSpacing"];
+const canvasKnowledgeLetterSpacingOptions = [
+  { label: "字距 紧 -0.5", value: -0.5 },
+  { label: "字距 微紧 -0.25", value: -0.25 },
+  { label: "字距 标准 0", value: 0 },
+  { label: "字距 微宽 0.25", value: 0.25 },
+  { label: "字距 0.5", value: 0.5 },
+  { label: "字距 0.75", value: 0.75 },
+  { label: "字距 宽 1", value: 1 },
+  { label: "字距 1.25", value: 1.25 },
+  { label: "字距 更宽 1.5", value: 1.5 },
+  { label: "字距 1.75", value: 1.75 },
+  { label: "字距 大 2", value: 2 },
+  { label: "字距 2.5", value: 2.5 },
+  { label: "字距 很大 3", value: 3 }
+];
+const canvasKnowledgeRowMarginOptions = [
+  { label: "段距 0.8", value: 0.8 },
+  { label: "段距 0.9", value: 0.9 },
+  { label: "段距 紧凑 1", value: 1 },
+  { label: "段距 1.1", value: 1.1 },
+  { label: "段距 标准 1.2", value: canvasKnowledgeDefaultRowMargin },
+  { label: "段距 1.3", value: 1.3 },
+  { label: "段距 1.4", value: 1.4 },
+  { label: "段距 1.5", value: 1.5 },
+  { label: "段距 舒展 1.6", value: 1.6 },
+  { label: "段距 1.8", value: 1.8 },
+  { label: "段距 宽 2", value: 2 },
+  { label: "段距 2.2", value: 2.2 },
+  { label: "段距 大 2.4", value: 2.4 },
+  { label: "段距 2.8", value: 2.8 },
+  { label: "段距 很大 3", value: 3 }
+];
+const canvasKnowledgeEditorOptions: IEditorOption = {
+  mode: EditorMode.EDIT,
+  pageMode: PageMode.CONTINUITY,
+  paperDirection: PaperDirection.HORIZONTAL,
+  width: 794,
+  height: 1123,
+  scale: 1,
+  pageGap: 0,
+  margins: [56, 64, 80, 64],
+  defaultFont: "Microsoft YaHei",
+  defaultSize: 16,
+  defaultColor: "#111827",
+  defaultBasicRowMarginHeight: 8,
+  defaultRowMargin: canvasKnowledgeDefaultRowMargin,
+  wordBreak: WordBreak.BREAK_WORD
+};
+
+const canvasKnowledgeFontSizes = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 26, 28, 30, 32, 36, 40, 44, 48, 56, 64, 72];
+const canvasKnowledgeTextColors = ["#111827", "#64748b", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#2563eb", "#7c3aed", "#db2777"];
+const canvasKnowledgeHighlightColors = ["#fef08a", "#bbf7d0", "#bfdbfe", "#fecdd3", "#fde68a"];
+const canvasKnowledgeFormatProperties: Array<keyof CanvasKnowledgeFormatBrush["styles"]> = [
+  "font",
+  "size",
+  "bold",
+  "italic",
+  "underline",
+  "strikeout",
+  "color",
+  "highlight",
+  "rowFlex",
+  "rowMargin",
+  "letterSpacing",
+  "level",
+  "listType",
+  "listStyle"
+];
+
+function createCanvasDataFromHtml(rawHtml: string): IEditorData {
+  const html = rawHtml.trim();
+  if (!html) return { main: [{ value: "" }] };
+  try {
+    const main = getElementListByHTML(html, { innerWidth: canvasKnowledgeHtmlInnerWidth });
+    return { main: main.length > 0 ? main : [{ value: "" }] };
+  } catch {
+    const text = (() => {
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      return container.textContent || html.replace(/<[^>]+>/g, "");
+    })();
+    return {
+      main: text
+        .split(/\r?\n/)
+        .flatMap((line, index, lines) => index < lines.length - 1 ? [{ value: line }, { value: "\n" }] : [{ value: line }])
+    };
+  }
+}
+
+function normalizeCanvasKnowledgeElement(
+  element: IElement,
+  options: { resetLegacyJustify: boolean }
+): IElement {
+  const next: IElement = { ...element };
+  const letterSpacing = typeof next.letterSpacing === "number" ? next.letterSpacing : canvasKnowledgeDefaultLetterSpacing;
+  if (Math.abs(letterSpacing) < 0.01 || letterSpacing > 3) {
+    delete next.letterSpacing;
+  }
+
+  if (typeof next.rowMargin === "number" && next.rowMargin > 3) {
+    next.rowMargin = canvasKnowledgeDefaultRowMargin;
+  }
+
+  if (options.resetLegacyJustify && (next.rowFlex === RowFlex.JUSTIFY || next.rowFlex === RowFlex.ALIGNMENT)) {
+    next.rowFlex = RowFlex.LEFT;
+  }
+
+  if (next.valueList) {
+    next.valueList = next.valueList.map((child) => normalizeCanvasKnowledgeElement(child, options));
+  }
+
+  if (next.trList) {
+    next.trList = next.trList.map((row) => ({
+      ...row,
+      tdList: row.tdList.map((cell) => ({
+        ...cell,
+        value: cell.value.map((child) => normalizeCanvasKnowledgeElement(child, options))
+      }))
+    }));
+  }
+
+  return next;
+}
+
+function normalizeCanvasKnowledgeData(
+  data: IEditorData,
+  options: { resetLegacyJustify?: boolean } = {}
+): IEditorData {
+  const normalizeList = (list: IElement[] | undefined) =>
+    list?.map((element) => normalizeCanvasKnowledgeElement(element, { resetLegacyJustify: Boolean(options.resetLegacyJustify) }));
+
+  return {
+    ...data,
+    header: normalizeList(data.header),
+    main: normalizeList(data.main) ?? [{ value: "" }],
+    footer: normalizeList(data.footer)
+  };
+}
+
+function applyCanvasKnowledgeLetterSpacing(element: IElement, letterSpacing: number): IElement {
+  const next: IElement = { ...element };
+  if (next.valueList) {
+    next.valueList = next.valueList.map((child) => applyCanvasKnowledgeLetterSpacing(child, letterSpacing));
+  }
+
+  if (next.trList) {
+    next.trList = next.trList.map((row) => ({
+      ...row,
+      tdList: row.tdList.map((cell) => ({
+        ...cell,
+        value: cell.value.map((child) => applyCanvasKnowledgeLetterSpacing(child, letterSpacing))
+      }))
+    }));
+  }
+
+  const isTextElement = !next.type || next.type === "text";
+  if (isTextElement && next.value && next.value !== "\n" && next.value !== "​") {
+    if (Math.abs(letterSpacing) < 0.01) {
+      delete next.letterSpacing;
+    } else {
+      next.letterSpacing = letterSpacing;
+    }
+  }
+
+  return next;
+}
+
+function pickCanvasKnowledgeFormat(element: Partial<IElement>): CanvasKnowledgeFormatBrush["styles"] {
+  const styles: CanvasKnowledgeFormatBrush["styles"] = {};
+  canvasKnowledgeFormatProperties.forEach((property) => {
+    const value = element[property];
+    if (value !== undefined && value !== null) {
+      Object.assign(styles, { [property]: value });
+    }
+  });
+  return styles;
+}
+
+function applyCanvasKnowledgeFormat(element: IElement, styles: CanvasKnowledgeFormatBrush["styles"]): IElement {
+  const next: IElement = { ...element, ...styles };
+  if (Array.isArray(next.valueList)) {
+    next.valueList = next.valueList.map((child) => applyCanvasKnowledgeFormat(child, styles));
+  }
+  if (Array.isArray(next.trList)) {
+    next.trList = next.trList.map((row) => ({
+      ...row,
+      tdList: row.tdList.map((cell) => ({
+        ...cell,
+        value: cell.value.map((child) => applyCanvasKnowledgeFormat(child, styles))
+      }))
+    }));
+  }
+  return next;
+}
+
+function getCanvasDocumentInitialData(
+  canvasDocument: KnowledgeCanvasDocument | null,
+  html: string
+): IEditorData {
+  if (canvasDocument?.kind === "canvas-editor" && Array.isArray(canvasDocument.data?.main)) {
+    return normalizeCanvasKnowledgeData(canvasDocument.data, {
+      resetLegacyJustify: canvasDocument.version < canvasKnowledgeDocumentVersion
+    });
+  }
+  return normalizeCanvasKnowledgeData(createCanvasDataFromHtml(html), { resetLegacyJustify: true });
+}
+
+function renderCanvasMindBranchList(nodes: NodeObj[] | undefined): string {
+  if (!nodes || nodes.length === 0) return "";
+  return `<ul>${nodes
+    .map((node) => `<li>${escapeHtml(node.topic)}${renderCanvasMindBranchList(node.children)}</li>`)
+    .join("")}</ul>`;
+}
+
+function renderCanvasMindBranchHtml(branch: NodeObj) {
+  return [
+    `<h2>思维导图：${escapeHtml(branch.topic)}</h2>`,
+    renderCanvasMindBranchList(branch.children) || "<p>暂无子分支</p>"
+  ].join("");
+}
+
+function CanvasKnowledgePanel({
+  nodeId,
+  topic,
+  value,
+  document: canvasDocument,
+  branchNode,
+  knowledgeFormatBrush,
+  onKnowledgeFormatBrushChange,
+  onKnowledgeChange,
+  onKnowledgeDocumentChange,
+  onNavigatePreviousKnowledgePage,
+  onNavigateNextKnowledgePage,
+  previousKnowledgePageTitle,
+  nextKnowledgePageTitle,
+  hideParentKnowledgePages,
+  onToggleParentKnowledgePages
+}: {
+  nodeId: string;
+  topic: string;
+  value: string;
+  document: KnowledgeCanvasDocument | null;
+  branchNode: NodeObj | null;
+  knowledgeFormatBrush: KnowledgeFormatBrush | null;
+  onKnowledgeFormatBrushChange: (format: KnowledgeFormatBrush | null) => void;
+  onKnowledgeChange: (nodeId: string, content: string) => void;
+  onKnowledgeDocumentChange: (nodeId: string, document: KnowledgeCanvasDocument) => void;
+  onNavigatePreviousKnowledgePage: (() => void) | null;
+  onNavigateNextKnowledgePage: (() => void) | null;
+  previousKnowledgePageTitle: string | null;
+  nextKnowledgePageTitle: string | null;
+  hideParentKnowledgePages: boolean;
+  onToggleParentKnowledgePages: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<CanvasEditor | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const lastSavedHtmlRef = useRef(value);
+  const lastRangeRef = useRef<IRange | null>(null);
+  const [rangeStyle, setRangeStyle] = useState<Partial<IRangeStyle>>({});
+  const [canvasFormatBrush, setCanvasFormatBrush] = useState<CanvasKnowledgeFormatBrush | null>(null);
+
+  const persistCanvasDocument = useCallback((reason = "content-change") => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const result = editor.command.getValue({ extraPickAttrs: canvasKnowledgeExtraPickAttrs });
+    const htmlResult = editor.command.getHTML();
+    const html = htmlResult.main || "";
+    const nextDocument: KnowledgeCanvasDocument = {
+      kind: "canvas-editor",
+      version: canvasKnowledgeDocumentVersion,
+      nodeId,
+      topic,
+      html,
+      data: result.data,
+      options: result.options,
+      updatedAt: new Date().toISOString()
+    };
+    lastSavedHtmlRef.current = html;
+    onKnowledgeChange(nodeId, html);
+    onKnowledgeDocumentChange(nodeId, nextDocument);
+    void window.aistudy?.debug?.appendKnowledgeFormatLog?.({
+      at: new Date().toISOString(),
+      event: "canvas-knowledge.persist",
+      reason,
+      nodeId,
+      topic,
+      htmlLength: html.length,
+      mainElementCount: result.data.main.length
+    });
+  }, [nodeId, onKnowledgeChange, onKnowledgeDocumentChange, topic]);
+
+  const schedulePersist = useCallback((reason = "content-change") => {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      persistCanvasDocument(reason);
+    }, 360);
+  }, [persistCanvasDocument]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+    container.innerHTML = "";
+    const initialData = getCanvasDocumentInitialData(canvasDocument, value);
+    const initialOptions = {
+      ...(canvasDocument?.options ?? {}),
+      ...canvasKnowledgeEditorOptions
+    };
+    const editor = new CanvasEditor(container, initialData, initialOptions);
+    editorRef.current = editor;
+    lastSavedHtmlRef.current = canvasDocument?.html ?? value;
+    editor.listener.contentChange = () => schedulePersist("content-change");
+    editor.listener.rangeStyleChange = (payload) => {
+      setRangeStyle(payload);
+      const range = editor.command.getRange();
+      if (range.startIndex >= 0 || range.endIndex >= 0) {
+        lastRangeRef.current = range;
+      }
+    };
+    editor.listener.saved = () => persistCanvasDocument("editor-saved");
+    window.setTimeout(() => editor.command.executeFocus(), 80);
+
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      persistCanvasDocument("unmount");
+      editor.destroy();
+      editorRef.current = null;
+      container.innerHTML = "";
+    };
+  }, [canvasDocument?.nodeId, nodeId]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !value || value === lastSavedHtmlRef.current) return;
+    const nextData = createCanvasDataFromHtml(value);
+    editor.command.executeSetValue(nextData, { isSetCursor: false });
+    lastSavedHtmlRef.current = value;
+  }, [value]);
+
+  const restoreCanvasRange = (editor: CanvasEditor) => {
+    const range = lastRangeRef.current;
+    if (!range || (range.startIndex < 0 && range.endIndex < 0)) return;
+    editor.command.executeSetRange(
+      range.startIndex,
+      range.endIndex,
+      range.tableId,
+      range.startTdIndex,
+      range.endTdIndex,
+      range.startTrIndex,
+      range.endTrIndex
+    );
+  };
+
+  const rememberCanvasRange = (editor: CanvasEditor) => {
+    const range = editor.command.getRange();
+    if (range.startIndex >= 0 || range.endIndex >= 0) {
+      lastRangeRef.current = range;
+    }
+  };
+
+  const preserveCanvasScroll = (action: () => void) => {
+    const stage = stageRef.current;
+    const scrollLeft = stage?.scrollLeft ?? 0;
+    const scrollTop = stage?.scrollTop ?? 0;
+    action();
+
+    if (!stage) return;
+    const restore = () => {
+      stage.scrollLeft = scrollLeft;
+      stage.scrollTop = scrollTop;
+    };
+    restore();
+    window.requestAnimationFrame(restore);
+    window.setTimeout(restore, 0);
+  };
+
+  const runCommand = (action: (editor: CanvasEditor) => void, reason: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    preserveCanvasScroll(() => {
+      editor.command.executeFocus();
+      restoreCanvasRange(editor);
+      action(editor);
+      rememberCanvasRange(editor);
+      schedulePersist(reason);
+    });
+  };
+
+  const applyLetterSpacing = (letterSpacing: number) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    preserveCanvasScroll(() => {
+      editor.command.executeFocus();
+      restoreCanvasRange(editor);
+      const selectedElements = editor.command.getRangeContext()?.selectionElementList ?? [];
+      if (selectedElements.length === 0) return;
+      editor.command.executeInsertElementList(
+        selectedElements.map((element) => applyCanvasKnowledgeLetterSpacing(element, letterSpacing)),
+        { isReplace: true }
+      );
+      rememberCanvasRange(editor);
+      schedulePersist("letter-spacing");
+    });
+  };
+
+  const copyCanvasFormat = (reusable = false) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    preserveCanvasScroll(() => {
+      editor.command.executeFocus();
+      restoreCanvasRange(editor);
+      const selectedElements = editor.command.getRangeContext()?.selectionElementList ?? [];
+      const sourceElement = selectedElements[0];
+      const styles = pickCanvasKnowledgeFormat(sourceElement ?? rangeStyle);
+      if (Object.keys(styles).length === 0) return;
+      if (knowledgeFormatBrush) onKnowledgeFormatBrushChange(null);
+      setCanvasFormatBrush({ styles, reusable });
+      rememberCanvasRange(editor);
+    });
+  };
+
+  const applyCanvasFormatBrush = () => {
+    const editor = editorRef.current;
+    if (!editor || !canvasFormatBrush) return;
+    preserveCanvasScroll(() => {
+      editor.command.executeFocus();
+      restoreCanvasRange(editor);
+      const selectedElements = editor.command.getRangeContext()?.selectionElementList ?? [];
+      if (selectedElements.length === 0) {
+        rememberCanvasRange(editor);
+        return;
+      }
+
+      editor.command.executeInsertElementList(
+        selectedElements.map((element) => applyCanvasKnowledgeFormat(element, canvasFormatBrush.styles)),
+        { isReplace: true }
+      );
+      rememberCanvasRange(editor);
+      schedulePersist("format-brush-apply");
+    });
+    if (!canvasFormatBrush.reusable) {
+      setCanvasFormatBrush(null);
+    }
+  };
+
+  const handleCanvasFormatBrushClick = () => {
+    if (canvasFormatBrush) {
+      applyCanvasFormatBrush();
+      return;
+    }
+    copyCanvasFormat(false);
+  };
+
+  const handleReusableCanvasFormatBrushClick = () => {
+    if (canvasFormatBrush?.reusable) {
+      applyCanvasFormatBrush();
+      return;
+    }
+    copyCanvasFormat(true);
+  };
+
+  const clearCanvasFormatBrush = () => {
+    setCanvasFormatBrush(null);
+  };
+
+  useEffect(() => {
+    if (!canvasFormatBrush) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      clearCanvasFormatBrush();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canvasFormatBrush]);
+
+  const protectCanvasToolbarSelection = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button")) {
+      event.preventDefault();
+    }
+  };
+
+  const insertMindBranch = () => {
+    if (!branchNode) return;
+    runCommand((editor) => {
+      const elementList = getElementListByHTML(renderCanvasMindBranchHtml(branchNode), { innerWidth: canvasKnowledgeHtmlInnerWidth });
+      editor.command.executeInsertElementList(elementList);
+    }, "insert-mind-branch");
+  };
+
+  const navigatePreviousKnowledgePage = () => {
+    persistCanvasDocument("navigate-previous");
+    onNavigatePreviousKnowledgePage?.();
+  };
+
+  const navigateNextKnowledgePage = () => {
+    persistCanvasDocument("navigate-next");
+    onNavigateNextKnowledgePage?.();
+  };
+
+  useEffect(() => {
+    if (localStorage.getItem("aistudy:format-probe-enabled") !== "1") return undefined;
+    const probeWindow = window as Window & {
+      __aistudyCanvasKnowledgeProbe?: {
+        getHTML: () => ReturnType<CanvasEditor["command"]["getHTML"]> | null;
+        getRange: () => IRange | null;
+        getValue: () => ReturnType<CanvasEditor["command"]["getValue"]> | null;
+        setRange: (startIndex: number, endIndex: number) => boolean;
+        setValue: (main: IElement[]) => boolean;
+        reset: (text?: string) => boolean;
+        selectAll: () => boolean;
+      };
+    };
+
+    probeWindow.__aistudyCanvasKnowledgeProbe = {
+      getHTML: () => editorRef.current?.command.getHTML() ?? null,
+      getRange: () => editorRef.current?.command.getRange() ?? null,
+      getValue: () => editorRef.current?.command.getValue({ extraPickAttrs: canvasKnowledgeExtraPickAttrs }) ?? null,
+      setRange: (startIndex: number, endIndex: number) => {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        editor.command.executeSetRange(startIndex, endIndex);
+        rememberCanvasRange(editor);
+        return true;
+      },
+      setValue: (main) => {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        lastRangeRef.current = null;
+        editor.command.executeSetValue({ main }, { isSetCursor: true });
+        return true;
+      },
+      reset: (text = "股票定义 段落测试") => {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        lastRangeRef.current = null;
+        editor.command.executeSetValue({ main: [{ value: text }] }, { isSetCursor: true });
+        return true;
+      },
+      selectAll: () => {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        editor.command.executeSelectAll();
+        rememberCanvasRange(editor);
+        return true;
+      }
+    };
+
+    return () => {
+      delete probeWindow.__aistudyCanvasKnowledgeProbe;
+    };
+  });
+
+  return (
+    <section className="knowledge-panel canvas-knowledge-panel" aria-label="knowledge">
+      <div className="canvas-knowledge-toolbar" onMouseDown={protectCanvasToolbarSelection}>
+        <div className="toolbar-group">
+          <button title="撤销" onClick={() => runCommand((editor) => editor.command.executeUndo(), "undo")}>
+            <Undo2 size={16} />
+          </button>
+          <button title="重做" onClick={() => runCommand((editor) => editor.command.executeRedo(), "redo")}>
+            <Redo2 size={16} />
+          </button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <select
+            title="标题与正文"
+            defaultValue=""
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              const levelMap: Record<string, TitleLevel | null> = {
+                body: null,
+                h1: TitleLevel.FIRST,
+                h2: TitleLevel.SECOND,
+                h3: TitleLevel.THIRD
+              };
+              runCommand((editor) => editor.command.executeTitle(levelMap[value] ?? null), "title");
+              event.currentTarget.value = "";
+            }}
+          >
+            <option value="" disabled>标题/正文</option>
+            <option value="body">正文</option>
+            <option value="h1">标题一</option>
+            <option value="h2">标题二</option>
+            <option value="h3">标题三</option>
+          </select>
+          <select
+            title="字体"
+            defaultValue="Microsoft YaHei"
+            onChange={(event) => runCommand((editor) => editor.command.executeFont(event.currentTarget.value), "font")}
+          >
+            {knowledgeFontFamilies.map((font) => (
+              <option key={font.value} value={font.value}>{font.label}</option>
+            ))}
+          </select>
+          <select
+            title="字号"
+            defaultValue="16"
+            onChange={(event) => runCommand((editor) => editor.command.executeSize(Number(event.currentTarget.value)), "size")}
+          >
+            {canvasKnowledgeFontSizes.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+          <select
+            title="字间距"
+            defaultValue=""
+            onChange={(event) => {
+              applyLetterSpacing(Number(event.currentTarget.value));
+              event.currentTarget.value = "";
+            }}
+          >
+            <option value="" disabled>字距</option>
+            {canvasKnowledgeLetterSpacingOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <select
+            title="段间距"
+            defaultValue=""
+            onChange={(event) => {
+              runCommand((editor) => editor.command.executeRowMargin(Number(event.currentTarget.value)), "row-margin");
+              event.currentTarget.value = "";
+            }}
+          >
+            <option value="" disabled>段距</option>
+            {canvasKnowledgeRowMarginOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button className={rangeStyle.bold ? "active" : ""} title="加粗" onClick={() => runCommand((editor) => editor.command.executeBold(), "bold")}>
+            <Bold size={16} />
+          </button>
+          <button className={rangeStyle.italic ? "active" : ""} title="斜体" onClick={() => runCommand((editor) => editor.command.executeItalic(), "italic")}>
+            <em>I</em>
+          </button>
+          <button className={rangeStyle.underline ? "active" : ""} title="下划线" onClick={() => runCommand((editor) => editor.command.executeUnderline(), "underline")}>
+            <u>U</u>
+          </button>
+          <button className={rangeStyle.strikeout ? "active" : ""} title="删除线" onClick={() => runCommand((editor) => editor.command.executeStrikeout(), "strikeout")}>
+            <s>S</s>
+          </button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group canvas-color-group" aria-label="字体颜色">
+          <span className="toolbar-group-icon" title="字体颜色"><Type size={14} /></span>
+          {canvasKnowledgeTextColors.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className="text-color-swatch"
+              style={{ "--swatch-color": color } as React.CSSProperties}
+              title="字体颜色"
+              onClick={() => runCommand((editor) => editor.command.executeColor(color), "color")}
+            >
+              <span />
+            </button>
+          ))}
+        </div>
+
+        <div className="toolbar-group canvas-color-group" aria-label="高亮">
+          <span className="toolbar-group-icon" title="高亮"><Highlighter size={14} /></span>
+          {canvasKnowledgeHighlightColors.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className="text-color-swatch"
+              style={{ "--swatch-color": color } as React.CSSProperties}
+              title="高亮"
+              onClick={() => runCommand((editor) => editor.command.executeHighlight(color), "highlight")}
+            >
+              <span />
+            </button>
+          ))}
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button title="左对齐" onClick={() => runCommand((editor) => editor.command.executeRowFlex(RowFlex.LEFT), "align-left")}>
+            <AlignLeft size={16} />
+          </button>
+          <button title="居中" onClick={() => runCommand((editor) => editor.command.executeRowFlex(RowFlex.CENTER), "align-center")}>
+            <AlignCenter size={16} />
+          </button>
+          <button title="右对齐" onClick={() => runCommand((editor) => editor.command.executeRowFlex(RowFlex.RIGHT), "align-right")}>
+            <AlignRight size={16} />
+          </button>
+          <button title="两端对齐" onClick={() => runCommand((editor) => editor.command.executeRowFlex(RowFlex.JUSTIFY), "align-justify")}>
+            <AlignJustify size={16} />
+          </button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button title="无序列表" onClick={() => runCommand((editor) => editor.command.executeList(ListType.UL, ListStyle.DISC), "list-ul")}>
+            <List size={16} />
+          </button>
+          <button title="有序列表" onClick={() => runCommand((editor) => editor.command.executeList(ListType.OL, ListStyle.DECIMAL), "list-ol")}>
+            <ListOrdered size={16} />
+          </button>
+          <button title="表格" onClick={() => runCommand((editor) => editor.command.executeInsertTable(3, 3), "table")}>
+            <Table size={16} />
+          </button>
+          <button title="分页" onClick={() => runCommand((editor) => editor.command.executePageBreak(), "page-break")}>
+            <FileText size={16} />
+          </button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button title="插入当前思维导图分支" disabled={!branchNode} onClick={insertMindBranch}>
+            <GitFork size={16} />
+          </button>
+          <button title="打印" onClick={() => runCommand((editor) => { void editor.command.executePrint(); }, "print")}>
+            <Printer size={16} />
+          </button>
+          <button
+            className={canvasFormatBrush && !canvasFormatBrush.reusable ? "active" : ""}
+            title={canvasFormatBrush && !canvasFormatBrush.reusable ? "应用格式刷" : "复制格式"}
+            onClick={handleCanvasFormatBrushClick}
+          >
+            <Paintbrush size={16} />
+          </button>
+          <button
+            className={canvasFormatBrush?.reusable ? "active" : ""}
+            title={canvasFormatBrush?.reusable ? "连续应用格式刷" : "复制复用格式"}
+            onClick={handleReusableCanvasFormatBrushClick}
+          >
+            <Paintbrush size={16} />
+            <span className="button-corner-mark">∞</span>
+          </button>
+          {canvasFormatBrush && (
+            <button title="关闭格式刷" onClick={clearCanvasFormatBrush}>
+              <X size={14} />
+            </button>
+          )}
+          <button
+            className={hideParentKnowledgePages ? "active" : ""}
+            title={hideParentKnowledgePages ? "开启父级知识点页" : "关闭父级知识点页"}
+            onClick={onToggleParentKnowledgePages}
+          >
+            <Settings size={16} />
+          </button>
+        </div>
+
+        <div className="toolbar-spacer" />
+
+        <div className="toolbar-group knowledge-page-nav" aria-label="有内容页面切换">
+          <button
+            aria-label="切换到上一页"
+            disabled={!onNavigatePreviousKnowledgePage}
+            onClick={navigatePreviousKnowledgePage}
+            title={previousKnowledgePageTitle ? `上一页：${previousKnowledgePageTitle}` : "没有上一页"}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            aria-label="切换到下一页"
+            disabled={!onNavigateNextKnowledgePage}
+            onClick={navigateNextKnowledgePage}
+            title={nextKnowledgePageTitle ? `下一页：${nextKnowledgePageTitle}` : "没有下一页"}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div className="canvas-knowledge-stage" ref={stageRef}>
+        <div className="canvas-knowledge-editor" ref={containerRef} />
+      </div>
+    </section>
+  );
+}
+
 function KnowledgePanel({
   nodeId,
   topic,
   value,
   branchNode,
+  knowledgeFormatBrush,
+  onKnowledgeFormatBrushChange,
   onKnowledgeChange,
-  saveStatus
+  onNavigatePreviousKnowledgePage,
+  onNavigateNextKnowledgePage,
+  previousKnowledgePageTitle,
+  nextKnowledgePageTitle,
+  hideParentKnowledgePages,
+  onToggleParentKnowledgePages
 }: {
   nodeId: string;
   topic: string;
   value: string;
   branchNode: NodeObj | null;
+  knowledgeFormatBrush: KnowledgeFormatBrush | null;
+  onKnowledgeFormatBrushChange: (format: KnowledgeFormatBrush | null) => void;
   onKnowledgeChange: (nodeId: string, content: string) => void;
-  saveStatus: CourseSaveStatus;
+  onNavigatePreviousKnowledgePage: (() => void) | null;
+  onNavigateNextKnowledgePage: (() => void) | null;
+  previousKnowledgePageTitle: string | null;
+  nextKnowledgePageTitle: string | null;
+  hideParentKnowledgePages: boolean;
+  onToggleParentKnowledgePages: () => void;
 }) {
   const [draft, setDraft] = useState(value);
-  const [knowledgeFormatBrush, setKnowledgeFormatBrush] = useState<KnowledgeFormatBrush | null>(null);
   const [historyState, setHistoryState] = useState<KnowledgeHistoryState>({ canUndo: false, canRedo: false });
+  const [knowledgeZoom, setKnowledgeZoom] = useState(loadKnowledgeZoom);
+  const [flowchartEditor, setFlowchartEditor] = useState<FlowchartEditorState | null>(null);
   const latestDraftRef = useRef(value);
   const persistedValueRef = useRef(value);
   const nodeIdRef = useRef(nodeId);
@@ -2624,6 +5280,64 @@ function KnowledgePanel({
   const redoStackRef = useRef<string[]>([]);
   const lastSelectApplyRef = useRef<{ key: string; value: string; at: number } | null>(null);
   const isEditorFocusedRef = useRef(false);
+  const knowledgeFormatBrushClickTimerRef = useRef<number | null>(null);
+
+  const isKnowledgeFormatDebugEnabled = () => {
+    try {
+      return localStorage.getItem(knowledgeFormatDebugStorageKey) !== "0";
+    } catch {
+      return true;
+    }
+  };
+
+  const getNodeLabel = (node: Node | null) => {
+    if (!node) return "none";
+    if (node.nodeType === Node.TEXT_NODE) {
+      return `#text(${(node.textContent ?? "").replace(/\s+/g, " ").slice(0, 28)})`;
+    }
+    if (node instanceof HTMLElement) {
+      const className = node.className ? `.${String(node.className).replace(/\s+/g, ".")}` : "";
+      return `${node.tagName.toLowerCase()}${className}`;
+    }
+    return node.nodeName;
+  };
+
+  const getHtmlMetrics = (html: string) => ({
+    length: html.length,
+    styleAttributes: (html.match(/\sstyle=/g) ?? []).length,
+    paragraphs: (html.match(/<p[\s>]/g) ?? []).length,
+    emptyParagraphs: (html.match(/<p(?:\s[^>]*)?><br><\/p>/g) ?? []).length,
+    preview: html.replace(/\s+/g, " ").slice(0, 220)
+  });
+
+  const getRangeDebugSummary = (range: Range | null) => {
+    if (!range) return null;
+    return {
+      collapsed: range.collapsed,
+      text: range.toString().replace(/\s+/g, " ").slice(0, 80),
+      start: getNodeLabel(range.startContainer),
+      startOffset: range.startOffset,
+      end: getNodeLabel(range.endContainer),
+      endOffset: range.endOffset
+    };
+  };
+
+  const logKnowledgeFormatDebug = (event: string, detail: Record<string, unknown> = {}) => {
+    if (!isKnowledgeFormatDebugEnabled()) return;
+    const editor = editorRef.current;
+    const entry = {
+      at: new Date().toISOString(),
+      event,
+      nodeId,
+      topic,
+      activeBlock: getNodeLabel(activeBlockRef.current),
+      savedRange: getRangeDebugSummary(selectionRangeRef.current),
+      editor: getHtmlMetrics(editor?.innerHTML ?? ""),
+      ...detail
+    };
+    console.info("[AIstudy knowledge format]", entry);
+    void window.aistudy?.debug?.appendKnowledgeFormatLog?.(entry);
+  };
 
   const refreshHistoryState = () => {
     setHistoryState({
@@ -2718,6 +5432,9 @@ function KnowledgePanel({
 
   useEffect(() => {
     return () => {
+      if (knowledgeFormatBrushClickTimerRef.current !== null) {
+        window.clearTimeout(knowledgeFormatBrushClickTimerRef.current);
+      }
       if (latestDraftRef.current !== persistedValueRef.current) {
         onKnowledgeChangeRef.current(nodeIdRef.current, normalizeKnowledgeHtml(latestDraftRef.current));
       }
@@ -2750,33 +5467,60 @@ function KnowledgePanel({
     }
   };
 
-  const rememberSelection = () => {
+  const isNodeInsideEditor = (node: Node | null) => {
     const editor = editorRef.current;
+    return Boolean(editor && node && (node === editor || editor.contains(node)));
+  };
+
+  const isRangeInsideEditor = (range: Range | null): range is Range => {
+    return Boolean(range && isNodeInsideEditor(range.startContainer) && isNodeInsideEditor(range.endContainer));
+  };
+
+  const getLiveEditorSelectionRange = () => {
     const selection = window.getSelection();
-    if (!editor || !selection || selection.rangeCount === 0) return;
-    if (!editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
-    selectionRangeRef.current = selection.getRangeAt(0).cloneRange();
+    if (!selection || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    return isRangeInsideEditor(range) ? range : null;
+  };
+
+  const rememberSelection = () => {
+    const selection = window.getSelection();
+    const range = getLiveEditorSelectionRange();
+    if (!selection || !range) return;
+    selectionRangeRef.current = range.cloneRange();
     activeBlockRef.current = getEditableBlock(selection.focusNode);
   };
 
   const restoreSelection = () => {
-    const editor = editorRef.current;
     const range = selectionRangeRef.current;
-    if (!editor || !range) return;
+    if (!isRangeInsideEditor(range)) {
+      selectionRangeRef.current = null;
+      logKnowledgeFormatDebug("selection.restore.invalid");
+      return false;
+    }
     const selection = window.getSelection();
-    if (!selection) return;
+    if (!selection) return false;
     selection.removeAllRanges();
     selection.addRange(range);
+    logKnowledgeFormatDebug("selection.restore.ok", { range: getRangeDebugSummary(range) });
+    return true;
   };
 
   const getActiveSelectionRange = () => {
-    restoreSelection();
-    const editor = editorRef.current;
-    const selection = window.getSelection();
-    if (!editor || !selection || selection.rangeCount === 0) return null;
-    const range = selection.getRangeAt(0);
-    if (!editor.contains(range.commonAncestorContainer)) return null;
-    return range;
+    const liveRange = getLiveEditorSelectionRange();
+    if (liveRange) {
+      selectionRangeRef.current = liveRange.cloneRange();
+      activeBlockRef.current = getEditableBlock(liveRange.startContainer);
+      return liveRange;
+    }
+
+    if (!restoreSelection()) return null;
+    const restoredRange = getLiveEditorSelectionRange();
+    if (restoredRange) {
+      selectionRangeRef.current = restoredRange.cloneRange();
+      activeBlockRef.current = getEditableBlock(restoredRange.startContainer);
+    }
+    return restoredRange;
   };
 
   const getSelectionElement = () => {
@@ -2798,10 +5542,95 @@ function KnowledgePanel({
     return block;
   };
 
-  const setElementStyles = (element: HTMLElement, styles: Partial<CSSStyleDeclaration>) => {
+  const setElementStyles = (element: HTMLElement, styles: KnowledgeStylePatch) => {
     Object.entries(styles).forEach(([key, styleValue]) => {
+      if (styleValue === null || styleValue === "") {
+        clearStyleValue(element.style, key);
+        return;
+      }
       if (!styleValue) return;
       writeStyleValue(element.style, key, String(styleValue));
+    });
+  };
+
+  const removeElementStyles = (element: HTMLElement, properties: string[]) => {
+    properties.forEach((property) => clearStyleValue(element.style, property));
+  };
+
+  const getTextNodesInRange = (range: Range) => {
+    const editor = editorRef.current;
+    if (!editor) return [];
+    const textNodes: Text[] = [];
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode;
+      if (!(textNode instanceof Text) || (textNode.textContent ?? "").trim().length === 0) continue;
+      try {
+        if (range.intersectsNode(textNode)) textNodes.push(textNode);
+      } catch {
+        // Browser selections can briefly point at detached nodes after toolbar actions.
+      }
+    }
+
+    return textNodes;
+  };
+
+  const getInlineStyleProbeElements = (range: Range | null) => {
+    if (range && !range.collapsed) {
+      return getTextNodesInRange(range)
+        .map((node) => node.parentElement)
+        .filter((element): element is HTMLElement => element instanceof HTMLElement);
+    }
+
+    const selectionElement = getSelectionElement();
+    return selectionElement ? [selectionElement] : [];
+  };
+
+  const isInlineStyleActive = (predicate: (style: CSSStyleDeclaration) => boolean) => {
+    const range = getActiveSelectionRange();
+    const elements = getInlineStyleProbeElements(range);
+    return elements.length > 0 && elements.every((element) => predicate(window.getComputedStyle(element)));
+  };
+
+  const getEffectiveTextDecorationParts = (element: HTMLElement) => {
+    const editor = editorRef.current;
+    const decorations = new Set<string>();
+    let current: HTMLElement | null = element;
+    while (current && current !== editor) {
+      if (current.tagName === "U") decorations.add("underline");
+      if (current.tagName === "S" || current.tagName === "STRIKE") decorations.add("line-through");
+      const inlineValue = readStyleValue(current.style, "textDecorationLine");
+      const computedValue = window.getComputedStyle(current).textDecorationLine;
+      getTextDecorationParts(inlineValue || computedValue).forEach((part) => decorations.add(part));
+      current = current.parentElement;
+    }
+    return Array.from(decorations);
+  };
+
+  const isTextDecorationActive = (decoration: "underline" | "line-through") => {
+    const range = getActiveSelectionRange();
+    const elements = getInlineStyleProbeElements(range);
+    return elements.length > 0 && elements.every((element) => getEffectiveTextDecorationParts(element).includes(decoration));
+  };
+
+  const getSelectionDecorationUnion = () => {
+    const range = getActiveSelectionRange();
+    const decorations = new Set<string>();
+    getInlineStyleProbeElements(range).forEach((element) => {
+      getEffectiveTextDecorationParts(element).forEach((part) => {
+        decorations.add(part);
+      });
+    });
+    return Array.from(decorations);
+  };
+
+  const isSelectionInsideBlockStyle = (predicate: (style: CSSStyleDeclaration) => boolean) => {
+    const range = getActiveSelectionRange();
+    const elements = getInlineStyleProbeElements(range);
+    return elements.some((element) => {
+      const block = getEditableBlock(element);
+      return block ? predicate(window.getComputedStyle(block)) : false;
     });
   };
 
@@ -2842,7 +5671,7 @@ function KnowledgePanel({
     return Array.from(blocks);
   };
 
-  const applyBlockStylesToSelection = (styles: Record<string, string>) => {
+  const applyBlockStylesToSelection = (styles: KnowledgeStylePatch) => {
     const range = getActiveSelectionRange();
     const editor = editorRef.current;
     if (!editor) return;
@@ -2853,11 +5682,41 @@ function KnowledgePanel({
         ? [activeBlockRef.current]
         : [];
 
+    logKnowledgeFormatDebug("block.styles.apply", {
+      styles,
+      range: getRangeDebugSummary(range),
+      blockCount: blocks.length,
+      blocks: blocks.map((block) => getNodeLabel(block))
+    });
     blocks.forEach((block) => setElementStyles(block, styles));
   };
 
-  const styleSelectedTextFragment = (fragment: DocumentFragment, styles: Partial<CSSStyleDeclaration>) => {
+  const applyParagraphPreset = (presetValue: string) => {
+    const preset = knowledgeParagraphPresets.find((item) => item.value === presetValue);
+    if (!preset) return;
+    runKnowledgeFormatCommand("paragraphPreset", { presetValue }, () => {
+      restoreSelection();
+      captureHistorySnapshot();
+      applyBlockStylesToSelection(preset.styles);
+      rememberSelection();
+      editorRef.current?.focus();
+      commitCurrentEditor({ reason: "paragraph.preset" });
+    });
+  };
+
+  const stripPatchedStylesFromFragment = (fragment: DocumentFragment, styles: KnowledgeStylePatch) => {
+    const properties = Object.keys(styles);
+    if (properties.length === 0) return;
+    fragment.querySelectorAll("*").forEach((element) => {
+      if (element instanceof HTMLElement) removeElementStyles(element, properties);
+    });
+  };
+
+  const styleSelectedTextFragment = (fragment: DocumentFragment, styles: KnowledgeStylePatch) => {
     const wrappers: HTMLElement[] = [];
+    const shouldWrapText = Object.values(styles).some((styleValue) => styleValue !== null && styleValue !== "");
+    if (!shouldWrapText) return wrappers;
+
     const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
     const textNodes: Text[] = [];
 
@@ -2879,32 +5738,146 @@ function KnowledgePanel({
     return wrappers;
   };
 
-  const applyStylesToRangeFragment = (range: Range, styles: Partial<CSSStyleDeclaration>) => {
-    const fragment = range.extractContents();
-    const wrappers = styleSelectedTextFragment(fragment, styles);
-    if (wrappers.length === 0) {
-      range.insertNode(fragment);
-      return [];
-    }
+  const splitTextNodeForRange = (textNode: Text, range: Range) => {
+    const textLength = textNode.textContent?.length ?? 0;
+    const startOffset = range.startContainer === textNode ? range.startOffset : 0;
+    const endOffset = range.endContainer === textNode ? range.endOffset : textLength;
+    const boundedStart = Math.max(0, Math.min(startOffset, textLength));
+    const boundedEnd = Math.max(boundedStart, Math.min(endOffset, textLength));
 
-    const marker = document.createComment("knowledge-selection-end");
-    fragment.appendChild(marker);
-    range.insertNode(fragment);
-    const firstWrapper = wrappers[0];
-    const lastWrapper = wrappers[wrappers.length - 1];
-    marker.remove();
-    return [firstWrapper, lastWrapper];
+    if (boundedStart === boundedEnd) return null;
+
+    let selectedText = textNode;
+    if (boundedEnd < textLength) selectedText.splitText(boundedEnd);
+    if (boundedStart > 0) selectedText = selectedText.splitText(boundedStart);
+    return selectedText;
   };
 
-  const applyInlineStyle = (styles: Partial<CSSStyleDeclaration>) => {
+  const getReusableInlineWrapper = (textNode: Text) => {
+    const editor = editorRef.current;
+    const parent = textNode.parentElement;
+    if (!editor || !parent || parent === editor) return null;
+    if (!editor.contains(parent)) return null;
+    if (parent.matches("p, div, li, h1, h2, h3, h4, h5, h6")) return null;
+    if (parent.childNodes.length !== 1 || parent.firstChild !== textNode) return null;
+    return parent;
+  };
+
+  const applyInlineStyleToTextNodes = (
+    styles: KnowledgeStylePatch,
+    options: { captureHistory?: boolean; commit?: boolean } = {}
+  ) => {
+    const shouldCaptureHistory = options.captureHistory ?? true;
+    const shouldCommit = options.commit ?? true;
+    const range = getActiveSelectionRange();
+    logKnowledgeFormatDebug("inline.text.start", {
+      styles,
+      shouldCaptureHistory,
+      shouldCommit,
+      range: getRangeDebugSummary(range)
+    });
+    if (!range || range.collapsed) {
+      logKnowledgeFormatDebug("inline.text.fallback", {
+        reason: !range ? "missing-range" : "collapsed-range",
+        styles
+      });
+      applyInlineStyle(styles, { captureHistory: shouldCaptureHistory, commit: shouldCommit });
+      return;
+    }
+
+    const textNodes = getTextNodesInRange(range);
+    logKnowledgeFormatDebug("inline.text.nodes", {
+      count: textNodes.length,
+      nodes: textNodes.map((node) => getNodeLabel(node))
+    });
+    if (textNodes.length === 0) {
+      logKnowledgeFormatDebug("inline.text.no-nodes", { selectedText: range.toString() });
+      editorRef.current?.focus();
+      return;
+    }
+
+    if (shouldCaptureHistory) captureHistorySnapshot();
+    const wrappers: HTMLElement[] = [];
+    const beforeHtml = editorRef.current?.innerHTML ?? "";
+
+    [...textNodes].reverse().forEach((textNode) => {
+      const selectedText = splitTextNodeForRange(textNode, range);
+      if (!selectedText || (selectedText.textContent ?? "").length === 0) return;
+      const reusableWrapper = getReusableInlineWrapper(selectedText);
+      if (reusableWrapper) {
+        setElementStyles(reusableWrapper, styles);
+        wrappers.unshift(reusableWrapper);
+        return;
+      }
+      const wrapper = document.createElement("span");
+      setElementStyles(wrapper, styles);
+      selectedText.parentNode?.insertBefore(wrapper, selectedText);
+      wrapper.appendChild(selectedText);
+      wrappers.unshift(wrapper);
+    });
+
+    if (wrappers.length > 0) {
+      const selection = window.getSelection();
+      const nextRange = document.createRange();
+      nextRange.setStartBefore(wrappers[0]);
+      nextRange.setEndAfter(wrappers[wrappers.length - 1]);
+      selection?.removeAllRanges();
+      selection?.addRange(nextRange);
+      rememberSelection();
+      if (shouldCommit) commitCurrentEditor({ reason: "inline.text" });
+    }
+
+    logKnowledgeFormatDebug("inline.text.done", {
+      wrapperCount: wrappers.length,
+      before: getHtmlMetrics(beforeHtml),
+      after: getHtmlMetrics(editorRef.current?.innerHTML ?? "")
+    });
+    editorRef.current?.focus();
+  };
+
+  const applyStylesToRangeFragment = (range: Range, styles: KnowledgeStylePatch) => {
+    const fragment = range.extractContents();
+    stripPatchedStylesFromFragment(fragment, styles);
+    const wrappers = styleSelectedTextFragment(fragment, styles);
+
+    const startMarker = document.createComment("knowledge-selection-start");
+    const marker = document.createComment("knowledge-selection-end");
+    fragment.insertBefore(startMarker, fragment.firstChild);
+    fragment.appendChild(marker);
+    range.insertNode(fragment);
+
+    const insertedNodes: Node[] = [];
+    let currentNode = startMarker.nextSibling;
+    while (currentNode && currentNode !== marker) {
+      insertedNodes.push(currentNode);
+      currentNode = currentNode.nextSibling;
+    }
+
+    const firstBoundary = wrappers[0] ?? insertedNodes[0] ?? null;
+    const lastBoundary = wrappers[wrappers.length - 1] ?? insertedNodes[insertedNodes.length - 1] ?? null;
+    startMarker.remove();
+    marker.remove();
+    return firstBoundary && lastBoundary ? [firstBoundary, lastBoundary] : [];
+  };
+
+  const applyInlineStyle = (
+    styles: KnowledgeStylePatch,
+    options: { captureHistory?: boolean; commit?: boolean; releaseFormatBrush?: boolean } = {}
+  ) => {
+    const shouldCaptureHistory = options.captureHistory ?? true;
+    const shouldCommit = options.commit ?? true;
     const range = getActiveSelectionRange();
     if (!range) {
       const editor = editorRef.current;
       const block = activeBlockRef.current;
+      logKnowledgeFormatDebug("inline.fragment.no-range", {
+        styles,
+        block: getNodeLabel(block)
+      });
       if (editor && block && editor.contains(block) && block !== editor) {
-        captureHistorySnapshot();
+        if (shouldCaptureHistory) captureHistorySnapshot();
         setElementStyles(block, styles);
-        commitCurrentEditor();
+        if (shouldCommit) commitCurrentEditor({ reason: "inline.fragment.block-fallback" });
       }
       editorRef.current?.focus();
       return;
@@ -2912,19 +5885,24 @@ function KnowledgePanel({
 
     if (range.collapsed) {
       const block = getEditableBlock(range.startContainer);
+      logKnowledgeFormatDebug("inline.fragment.collapsed", {
+        styles,
+        block: getNodeLabel(block)
+      });
       if (block) {
-        captureHistorySnapshot();
+        if (shouldCaptureHistory) captureHistorySnapshot();
         setElementStyles(block, styles);
         rememberSelection();
-        commitCurrentEditor();
+        if (shouldCommit) commitCurrentEditor({ reason: "inline.fragment.collapsed" });
       }
       editorRef.current?.focus();
       return;
     }
 
-    captureHistorySnapshot();
+    if (shouldCaptureHistory) captureHistorySnapshot();
     const wrapperBounds = applyStylesToRangeFragment(range, styles);
     if (wrapperBounds.length === 0) {
+      logKnowledgeFormatDebug("inline.fragment.no-bounds", { styles });
       editorRef.current?.focus();
       return;
     }
@@ -2937,24 +5915,307 @@ function KnowledgePanel({
     selection?.addRange(nextRange);
     rememberSelection();
     editorRef.current?.focus();
-    commitCurrentEditor();
+    if (shouldCommit) commitCurrentEditor({ reason: "inline.fragment" });
+    logKnowledgeFormatDebug("inline.fragment.done", {
+      styles,
+      bounds: wrapperBounds.map((node) => getNodeLabel(node))
+    });
+    if ((options.releaseFormatBrush ?? true) && knowledgeFormatBrush && !knowledgeFormatBrush.reusable) {
+      onKnowledgeFormatBrushChange(null);
+    }
   };
 
-  const execCommand = (command: string, value?: string) => {
-    restoreSelection();
-    captureHistorySnapshot();
-    document.execCommand(command, false, value);
+  const finishEditorCommand = (releaseFormatBrush = true) => {
     rememberSelection();
     editorRef.current?.focus();
-    commitCurrentEditor();
+    commitCurrentEditor({ reason: "editor.command.finish" });
+    if (releaseFormatBrush && knowledgeFormatBrush && !knowledgeFormatBrush.reusable) {
+      onKnowledgeFormatBrushChange(null);
+    }
+  };
+
+  const sortBlocksInDocumentOrder = (blocks: HTMLElement[]) =>
+    [...blocks].sort((first, second) => {
+      if (first === second) return 0;
+      return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_PRECEDING ? 1 : -1;
+    });
+
+  const getTargetEditableBlocks = () => {
+    const range = getActiveSelectionRange();
+    const editor = editorRef.current;
+    if (!editor) return [];
+    if (range) return sortBlocksInDocumentOrder(getEditableBlocksInRange(range));
+    const block = activeBlockRef.current;
+    return block && editor.contains(block) && block !== editor ? [block] : [];
+  };
+
+  const selectAroundNodes = (nodes: Node[]) => {
+    const connectedNodes = nodes.filter((node) => node.isConnected);
+    if (connectedNodes.length === 0) return;
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.setStartBefore(connectedNodes[0]);
+    range.setEndAfter(connectedNodes[connectedNodes.length - 1]);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
+  const createParagraphFromListItem = (item: HTMLLIElement) => {
+    const paragraph = document.createElement("p");
+    copyKnowledgeElementStyles(item, paragraph);
+    paragraph.innerHTML = item.innerHTML || "<br>";
+    return paragraph;
+  };
+
+  const unwrapList = (list: HTMLUListElement | HTMLOListElement) => {
+    const paragraphs = Array.from(list.children)
+      .filter((item): item is HTMLLIElement => item instanceof HTMLLIElement)
+      .map(createParagraphFromListItem);
+    list.replaceWith(...paragraphs);
+    return paragraphs;
+  };
+
+  const convertListTag = (list: HTMLUListElement | HTMLOListElement, listTag: "UL" | "OL") => {
+    const nextList = document.createElement(listTag.toLowerCase()) as HTMLUListElement | HTMLOListElement;
+    copyKnowledgeElementStyles(list, nextList);
+    while (list.firstChild) nextList.appendChild(list.firstChild);
+    list.replaceWith(nextList);
+    return nextList;
+  };
+
+  const toggleList = (listTag: "UL" | "OL") => {
+    logKnowledgeFormatDebug("command.start", { command: "list", listTag });
+    restoreSelection();
+    const blocks = getTargetEditableBlocks();
+    if (blocks.length === 0) {
+      logKnowledgeFormatDebug("command.no-target", { command: "list", listTag });
+      return;
+    }
+    captureHistorySnapshot();
+
+    const listBlocks = blocks.filter((block): block is HTMLLIElement => block instanceof HTMLLIElement);
+    if (listBlocks.length === blocks.length) {
+      const lists = Array.from(
+        new Set(
+          listBlocks
+            .map((block) => block.closest("ul, ol"))
+            .filter((list): list is HTMLUListElement | HTMLOListElement => list instanceof HTMLUListElement || list instanceof HTMLOListElement)
+        )
+      );
+      const nextSelectionNodes: Node[] = lists.flatMap((list): Node[] =>
+        list.tagName === listTag ? unwrapList(list) : [convertListTag(list, listTag)]
+      );
+      selectAroundNodes(nextSelectionNodes);
+      finishEditorCommand();
+      logKnowledgeFormatDebug("command.done", { command: "list", listTag, mode: "unwrap-or-convert" });
+      return;
+    }
+
+    const firstBlock = blocks[0];
+    const parent = firstBlock.parentNode;
+    if (!parent) {
+      logKnowledgeFormatDebug("command.no-target", { command: "list", listTag, reason: "missing-parent" });
+      return;
+    }
+
+    const list = document.createElement(listTag.toLowerCase()) as HTMLUListElement | HTMLOListElement;
+    blocks.forEach((block) => {
+      const item = document.createElement("li");
+      copyKnowledgeElementStyles(block, item);
+      item.innerHTML = block.innerHTML || "<br>";
+      list.appendChild(item);
+    });
+    parent.insertBefore(list, firstBlock);
+    blocks.forEach((block) => block.remove());
+    selectAroundNodes([list]);
+    finishEditorCommand();
+    logKnowledgeFormatDebug("command.done", { command: "list", listTag, mode: "wrap" });
+  };
+
+  const applyIndentChange = (direction: 1 | -1) => {
+    logKnowledgeFormatDebug("command.start", { command: "indent", direction });
+    restoreSelection();
+    const blocks = getTargetEditableBlocks();
+    if (blocks.length === 0) {
+      logKnowledgeFormatDebug("command.no-target", { command: "indent", direction });
+      return;
+    }
+    captureHistorySnapshot();
+    blocks.forEach((block) => {
+      const current = Number.parseFloat(block.style.marginLeft || "0") || 0;
+      const next = Math.max(0, current + direction * 2);
+      setElementStyles(block, { marginLeft: next === 0 ? null : `${next}em` });
+    });
+    finishEditorCommand(false);
+    logKnowledgeFormatDebug("command.done", { command: "indent", direction, blockCount: blocks.length });
+  };
+
+  const insertHtmlAtSelection = (html: string) => {
+    const editor = editorRef.current;
+    if (!editor) return [];
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const fragment = template.content.cloneNode(true) as DocumentFragment;
+    const insertedNodes = Array.from(fragment.childNodes);
+    const range = getActiveSelectionRange();
+
+    if (range) {
+      range.deleteContents();
+      range.insertNode(fragment);
+    } else {
+      editor.appendChild(fragment);
+    }
+
+    if (insertedNodes.length > 0) {
+      const selection = window.getSelection();
+      const lastNode = insertedNodes[insertedNodes.length - 1];
+      if (selection && lastNode.isConnected) {
+        const nextRange = document.createRange();
+        nextRange.setStartAfter(lastNode);
+        nextRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(nextRange);
+      }
+    }
+
+    return insertedNodes;
+  };
+
+  const runKnowledgeFormatCommand = (command: string, detail: Record<string, unknown>, action: () => void) => {
+    logKnowledgeFormatDebug("command.start", { command, ...detail });
+    try {
+      action();
+      logKnowledgeFormatDebug("command.done", { command });
+    } catch (error) {
+      logKnowledgeFormatDebug("command.error", {
+        command,
+        message: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  };
+
+  const toggleInlineStyleValue = ({
+    command,
+    property,
+    enabledValue,
+    disabledValue,
+    isActive
+  }: {
+    command: string;
+    property: keyof KnowledgeStylePatch;
+    enabledValue: string;
+    disabledValue: string;
+    isActive: (style: CSSStyleDeclaration) => boolean;
+  }) => {
+    runKnowledgeFormatCommand(command, { enabledValue, disabledValue }, () => {
+      const active = isInlineStyleActive(isActive);
+      applyInlineStyleToTextNodes({
+        [property]: active ? disabledValue : enabledValue
+      });
+    });
+  };
+
+  const normalizeCssColorValue = (value: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = value;
+    return probe.style.color.replace(/\s+/g, " ").trim().toLowerCase();
+  };
+
+  const isSameCssColor = (first: string, second: string) => {
+    const firstColor = normalizeCssColorValue(first);
+    const secondColor = normalizeCssColorValue(second);
+    return Boolean(firstColor && secondColor && firstColor === secondColor);
   };
 
   const applyFontFamily = (fontFamily: string) => {
-    applyInlineStyle({ fontFamily });
+    runKnowledgeFormatCommand("fontFamily", { fontFamily }, () => {
+      applyInlineStyleToTextNodes({ fontFamily });
+    });
   };
 
   const applyFontSize = (fontSize: string) => {
-    applyInlineStyle({ fontSize });
+    runKnowledgeFormatCommand("fontSize", { fontSize }, () => {
+      applyInlineStyleToTextNodes({ fontSize });
+    });
+  };
+
+  const applyBold = () => {
+    toggleInlineStyleValue({
+      command: "bold",
+      property: "fontWeight",
+      enabledValue: "800",
+      disabledValue: "400",
+      isActive: (style) => isFontWeightBoldValue(style.fontWeight)
+    });
+  };
+
+  const applyItalic = () => {
+    toggleInlineStyleValue({
+      command: "italic",
+      property: "fontStyle",
+      enabledValue: "italic",
+      disabledValue: "normal",
+      isActive: (style) => style.fontStyle === "italic" || style.fontStyle === "oblique"
+    });
+  };
+
+  const toggleTextDecoration = (decoration: "underline" | "line-through") => {
+    runKnowledgeFormatCommand(decoration, {}, () => {
+      const isActive = isTextDecorationActive(decoration);
+      const currentParts = getSelectionDecorationUnion();
+      const nextParts = isActive
+        ? currentParts.filter((part) => part !== decoration)
+        : [...currentParts, decoration];
+      const nextTextDecorationLine =
+        nextParts.length > 0
+          ? formatTextDecorationParts(nextParts)
+          : "none";
+      applyInlineStyleToTextNodes({ textDecorationLine: nextTextDecorationLine });
+    });
+  };
+
+  const applyUnderline = () => {
+    toggleTextDecoration("underline");
+  };
+
+  const applyStrikeThrough = () => {
+    toggleTextDecoration("line-through");
+  };
+
+  const applyTextAlign = (textAlign: string) => {
+    runKnowledgeFormatCommand("textAlign", { textAlign }, () => {
+      restoreSelection();
+      captureHistorySnapshot();
+      applyBlockStylesToSelection({ textAlign });
+      rememberSelection();
+      editorRef.current?.focus();
+      commitCurrentEditor({ reason: "text.align" });
+    });
+  };
+
+  const clearFormatting = () => {
+    runKnowledgeFormatCommand("clearFormatting", {}, () => {
+      restoreSelection();
+      captureHistorySnapshot();
+      applyInlineStyleToTextNodes(
+        {
+          fontFamily: "inherit",
+          fontSize: "inherit",
+          fontWeight: "400",
+          fontStyle: "normal",
+          textDecorationLine: "none",
+          color: "inherit",
+          backgroundColor: "transparent"
+        },
+        { captureHistory: false, commit: false }
+      );
+      applyBlockStylesToSelection(
+        Object.fromEntries(knowledgeBlockStyleProperties.map((property) => [property, null])) as KnowledgeStylePatch
+      );
+      finishEditorCommand();
+    });
   };
 
   const handleFontFamilySelect = (event: React.FormEvent<HTMLSelectElement>) => {
@@ -2978,31 +6239,55 @@ function KnowledgePanel({
   };
 
   const applyTextColor = (color: string) => {
-    applyInlineStyle({ color });
+    runKnowledgeFormatCommand("textColor", { color }, () => {
+      applyInlineStyleToTextNodes({ color });
+    });
+  };
+
+  const toggleTextColor = (color: string) => {
+    toggleInlineStyleValue({
+      command: "textColor.swatch",
+      property: "color",
+      enabledValue: color,
+      disabledValue: "inherit",
+      isActive: (style) => isSameCssColor(style.color, color)
+    });
   };
 
   const applyBackgroundColor = (backgroundColor: string) => {
-    applyInlineStyle({ backgroundColor });
+    runKnowledgeFormatCommand("backgroundColor", { backgroundColor }, () => {
+      applyInlineStyleToTextNodes({ backgroundColor });
+    });
   };
 
-  const commitCurrentEditor = () => {
-    const content = normalizeKnowledgeHtml(editorRef.current?.innerHTML || "");
-    if (editorRef.current && editorRef.current.innerHTML !== content) editorRef.current.innerHTML = content;
+  const commitCurrentEditor = (options: { normalizeDom?: boolean; reason?: string } = {}) => {
+    const rawContent = editorRef.current?.innerHTML || "";
+    const content = normalizeKnowledgeHtml(rawContent);
+    const shouldNormalizeDom = options.normalizeDom ?? false;
+    const willRewriteDom = Boolean(shouldNormalizeDom && editorRef.current && editorRef.current.innerHTML !== content);
+    if (willRewriteDom && editorRef.current) editorRef.current.innerHTML = content;
     setDraft(content);
     latestDraftRef.current = content;
     onKnowledgeChange(nodeId, content);
     persistedValueRef.current = content;
+    logKnowledgeFormatDebug("commit.current", {
+      reason: options.reason ?? "unknown",
+      normalizedDom: willRewriteDom,
+      raw: getHtmlMetrics(rawContent),
+      normalized: getHtmlMetrics(content)
+    });
   };
 
-  const copyKnowledgeFormat = () => {
+  const copyKnowledgeFormat = (reusable = false) => {
     restoreSelection();
     const sourceElement = getSelectionElement();
     const sourceBlock = activeBlockRef.current ?? getEditableBlock(sourceElement);
     const computedStyle = sourceElement ? window.getComputedStyle(sourceElement) : null;
     const blockStyle = sourceBlock ? window.getComputedStyle(sourceBlock) : computedStyle;
-    setKnowledgeFormatBrush({
+    onKnowledgeFormatBrushChange({
       inlineStyles: getStyleMap(computedStyle, knowledgeInlineStyleProperties),
-      blockStyles: getStyleMap(blockStyle, knowledgeBlockStyleProperties)
+      blockStyles: getStyleMap(blockStyle, knowledgeBlockStyleProperties),
+      reusable
     });
     editorRef.current?.focus();
   };
@@ -3014,11 +6299,38 @@ function KnowledgePanel({
     }
 
     restoreSelection();
-    applyInlineStyle(knowledgeFormatBrush.inlineStyles);
-    applyBlockStylesToSelection(knowledgeFormatBrush.blockStyles);
+    const copiedFormat = knowledgeFormatBrush;
+    captureHistorySnapshot();
+    applyInlineStyle(copiedFormat.inlineStyles, {
+      captureHistory: false,
+      commit: false,
+      releaseFormatBrush: false
+    });
+    applyBlockStylesToSelection(copiedFormat.blockStyles);
     rememberSelection();
     editorRef.current?.focus();
-    commitCurrentEditor();
+    commitCurrentEditor({ reason: "format.brush.apply" });
+    if (!copiedFormat.reusable) {
+      onKnowledgeFormatBrushChange(null);
+    }
+  };
+
+  const handleKnowledgeFormatBrushClick = () => {
+    if (knowledgeFormatBrushClickTimerRef.current !== null) {
+      window.clearTimeout(knowledgeFormatBrushClickTimerRef.current);
+    }
+    knowledgeFormatBrushClickTimerRef.current = window.setTimeout(() => {
+      knowledgeFormatBrushClickTimerRef.current = null;
+      applyKnowledgeFormat();
+    }, 180);
+  };
+
+  const handleKnowledgeFormatBrushDoubleClick = () => {
+    if (knowledgeFormatBrushClickTimerRef.current !== null) {
+      window.clearTimeout(knowledgeFormatBrushClickTimerRef.current);
+      knowledgeFormatBrushClickTimerRef.current = null;
+    }
+    copyKnowledgeFormat(true);
   };
 
   const handleInput = () => {
@@ -3030,16 +6342,58 @@ function KnowledgePanel({
 
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const key = event.key.toLowerCase();
+    if (key === "escape" && knowledgeFormatBrush) {
+      event.preventDefault();
+      onKnowledgeFormatBrushChange(null);
+      return;
+    }
     if (!event.ctrlKey && !event.metaKey) return;
     if (key === "z" && !event.shiftKey) {
       event.preventDefault();
       undoKnowledgeEdit();
       return;
     }
-    if (key === "x" || key === "y" || (key === "z" && event.shiftKey)) {
+    if (key === "y" || (key === "z" && event.shiftKey)) {
       event.preventDefault();
       redoKnowledgeEdit();
+      return;
     }
+    if (key === "b") {
+      event.preventDefault();
+      applyBold();
+      return;
+    }
+    if (key === "i") {
+      event.preventDefault();
+      applyItalic();
+      return;
+    }
+    if (key === "u") {
+      event.preventDefault();
+      applyUnderline();
+    }
+  };
+
+  const navigatePreviousKnowledgePage = () => {
+    if (!onNavigatePreviousKnowledgePage) return;
+    flushDraft();
+    onNavigatePreviousKnowledgePage();
+  };
+
+  const navigateNextKnowledgePage = () => {
+    if (!onNavigateNextKnowledgePage) return;
+    flushDraft();
+    onNavigateNextKnowledgePage();
+  };
+
+  const handleKnowledgeWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    const nextZoom = clampKnowledgeZoom(Number((knowledgeZoom + direction * knowledgeZoomStep).toFixed(2)));
+    if (nextZoom === knowledgeZoom) return;
+    setKnowledgeZoom(nextZoom);
+    localStorage.setItem(knowledgeZoomStorageKey, String(nextZoom));
   };
 
   useEffect(() => {
@@ -3054,6 +6408,7 @@ function KnowledgePanel({
 
   const commitEditorContent = (content: string) => {
     const normalizedContent = normalizeKnowledgeHtml(content);
+    const willRewriteDom = Boolean(editorRef.current && editorRef.current.innerHTML !== normalizedContent);
     if (editorRef.current && editorRef.current.innerHTML !== normalizedContent) {
       editorRef.current.innerHTML = normalizedContent;
     }
@@ -3061,6 +6416,11 @@ function KnowledgePanel({
     latestDraftRef.current = normalizedContent;
     onKnowledgeChange(nodeId, normalizedContent);
     persistedValueRef.current = normalizedContent;
+    logKnowledgeFormatDebug("commit.structural", {
+      normalizedDom: willRewriteDom,
+      raw: getHtmlMetrics(content),
+      normalized: getHtmlMetrics(normalizedContent)
+    });
   };
 
   const insertBranchMap = () => {
@@ -3070,24 +6430,77 @@ function KnowledgePanel({
     editorRef.current.focus();
     captureHistorySnapshot();
 
-    const selection = window.getSelection();
-    const shouldInsertAtSelection =
-      selection &&
-      selection.rangeCount > 0 &&
-      editorRef.current.contains(selection.anchorNode);
-
-    if (shouldInsertAtSelection) {
-      document.execCommand("insertHTML", false, branchHtml);
-    } else {
-      editorRef.current.insertAdjacentHTML("beforeend", branchHtml);
-    }
-
+    insertHtmlAtSelection(branchHtml);
     commitEditorContent(editorRef.current.innerHTML || "");
     rememberSelection();
   };
 
+  const insertFlowchart = () => {
+    if (!editorRef.current) return;
+    const blockId = crypto.randomUUID();
+    const flowchart = createDefaultFlowchart();
+    restoreSelection();
+    editorRef.current.focus();
+    captureHistorySnapshot();
+
+    const flowchartHtml = renderKnowledgeFlowchartHtml(flowchart, blockId);
+
+    insertHtmlAtSelection(flowchartHtml);
+    commitEditorContent(editorRef.current.innerHTML || "");
+    selectionRangeRef.current = null;
+    setFlowchartEditor({ blockId, data: flowchart, selectedNodeId: flowchart.nodes[0]?.id ?? "" });
+  };
+
+  const saveFlowchart = (state: FlowchartEditorState) => {
+    if (!editorRef.current) return;
+    captureHistorySnapshot();
+    const block = editorRef.current.querySelector(`[data-flowchart-id="${state.blockId}"]`);
+    const nextHtml = renderKnowledgeFlowchartHtml(state.data, state.blockId);
+    if (block) {
+      block.outerHTML = nextHtml;
+    } else {
+      editorRef.current.insertAdjacentHTML("beforeend", nextHtml);
+    }
+    commitEditorContent(editorRef.current.innerHTML || "");
+    setFlowchartEditor(null);
+  };
+
   const handleEditorClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
+    const flowchartEditButton = target.closest(".flowchart-edit");
+    if (flowchartEditButton) {
+      event.preventDefault();
+      const flowchartBlock = flowchartEditButton.closest(".knowledge-flowchart");
+      if (!flowchartBlock) return;
+      const data = parseKnowledgeFlowchart(flowchartBlock);
+      setFlowchartEditor({
+        blockId: flowchartBlock.getAttribute("data-flowchart-id") || crypto.randomUUID(),
+        data,
+        selectedNodeId: data.nodes[0]?.id ?? ""
+      });
+      return;
+    }
+
+    const flowchartDeleteButton = target.closest(".flowchart-delete");
+    if (flowchartDeleteButton) {
+      event.preventDefault();
+      const flowchartBlock = flowchartDeleteButton.closest(".knowledge-flowchart");
+      if (!flowchartBlock || !editorRef.current) return;
+      captureHistorySnapshot();
+      const nextSibling = flowchartBlock.nextSibling;
+      flowchartBlock.remove();
+      if (
+        nextSibling instanceof HTMLParagraphElement &&
+        (nextSibling.textContent ?? "").trim() === "" &&
+        nextSibling.querySelector("br")
+      ) {
+        nextSibling.remove();
+      }
+      commitEditorContent(editorRef.current.innerHTML || "");
+      selectionRangeRef.current = null;
+      return;
+    }
+
     const closeButton = target.closest(".branch-map-close");
     if (!closeButton || !editorRef.current) return;
 
@@ -3119,15 +6532,7 @@ function KnowledgePanel({
   };
 
   return (
-    <section className="knowledge-panel" aria-label="知识点">
-      <header className="knowledge-header">
-        <div>
-          <span>知识点</span>
-          <h3>{topic}</h3>
-        </div>
-        <small className={`auto-save-status inline ${saveStatus}`}>{getCourseSaveStatusLabel(saveStatus)}</small>
-      </header>
-
+    <section className="knowledge-panel" aria-label="knowledge">
       <div className="knowledge-toolbar" onMouseDown={protectToolbarSelection}>
         <div className="toolbar-group">
           <button title="撤销 (Ctrl+Z)" disabled={!historyState.canUndo} onClick={undoKnowledgeEdit}>
@@ -3141,16 +6546,16 @@ function KnowledgePanel({
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button title="加粗 (Ctrl+B)" onClick={() => execCommand("bold")}>
+          <button title="加粗 (Ctrl+B)" onClick={applyBold}>
             <Bold size={16} />
           </button>
-          <button title="斜体 (Ctrl+I)" onClick={() => execCommand("italic")}>
+          <button title="斜体 (Ctrl+I)" onClick={applyItalic}>
             <em>I</em>
           </button>
-          <button title="下划线 (Ctrl+U)" onClick={() => execCommand("underline")}>
+          <button title="下划线 (Ctrl+U)" onClick={applyUnderline}>
             <u>U</u>
           </button>
-          <button title="删除线" onClick={() => execCommand("strikeThrough")}>
+          <button title="删除线" onClick={applyStrikeThrough}>
             <s>S</s>
           </button>
         </div>
@@ -3158,6 +6563,23 @@ function KnowledgePanel({
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
+          <select
+            title="标题与正文"
+            defaultValue=""
+            onChange={(event) => {
+              applyParagraphPreset(event.target.value);
+              event.currentTarget.value = "";
+            }}
+          >
+            <option value="" disabled>
+              标题/正文
+            </option>
+            {knowledgeParagraphPresets.map((preset) => (
+              <option key={preset.value} value={preset.value}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
           <select
             title="字体"
             defaultValue="Microsoft YaHei"
@@ -3174,7 +6596,6 @@ function KnowledgePanel({
             title="字号"
             defaultValue="22px"
             onChange={handleFontSizeSelect}
-            onInput={handleFontSizeSelect}
           >
             {knowledgeFontSizes.map((size) => (
               <option key={size} value={size}>
@@ -3186,38 +6607,51 @@ function KnowledgePanel({
 
         <div className="toolbar-divider" />
 
-        <div className="toolbar-group">
-          <label title="文字颜色" className="color-picker-label">
+        <div className="toolbar-group text-color-swatch-group" aria-label="常用字体颜色">
+          <span className="toolbar-group-icon" title="常用字体颜色">
             <Type size={14} />
-            <input
-              type="color"
-              defaultValue="#111827"
-              onChange={(e) => applyTextColor(e.target.value)}
-            />
-          </label>
-          <label title="背景颜色" className="color-picker-label">
-            <PaintBucket size={14} />
-            <input
-              type="color"
-              defaultValue="#ffffff"
-              onChange={(e) => applyBackgroundColor(e.target.value)}
-            />
+          </span>
+          {knowledgeTextColorSwatches.map((color) => (
+            <button
+              key={color.value}
+              type="button"
+              className="text-color-swatch"
+              style={{ "--swatch-color": color.value } as React.CSSProperties}
+              title={`字体颜色：${color.label}（再次点击取消）`}
+              aria-label={`字体颜色：${color.label}`}
+              onClick={() => toggleTextColor(color.value)}
+            >
+              <span />
+            </button>
+          ))}
+          <label className="color-picker-label" title="文字颜色">
+            <Type size={14} />
+            <input type="color" defaultValue="#111827" onChange={(event) => applyTextColor(event.target.value)} />
           </label>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button title="左对齐" onClick={() => execCommand("justifyLeft")}>
+          <label className="color-picker-label" title="背景颜色">
+            <PaintBucket size={14} />
+            <input type="color" defaultValue="#fef3c7" onChange={(event) => applyBackgroundColor(event.target.value)} />
+          </label>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button title="左对齐" onClick={() => applyTextAlign("left")}>
             <AlignLeft size={16} />
           </button>
-          <button title="居中" onClick={() => execCommand("justifyCenter")}>
+          <button title="居中" onClick={() => applyTextAlign("center")}>
             <AlignCenter size={16} />
           </button>
-          <button title="右对齐" onClick={() => execCommand("justifyRight")}>
+          <button title="右对齐" onClick={() => applyTextAlign("right")}>
             <AlignRight size={16} />
           </button>
-          <button title="两端对齐" onClick={() => execCommand("justifyFull")}>
+          <button title="两端" onClick={() => applyTextAlign("justify")}>
             <AlignJustify size={16} />
           </button>
         </div>
@@ -3225,10 +6659,10 @@ function KnowledgePanel({
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button title="无序列表" onClick={() => execCommand("insertUnorderedList")}>
+          <button title="无序列表" onClick={() => toggleList("UL")}>
             <List size={16} />
           </button>
-          <button title="有序列表" onClick={() => execCommand("insertOrderedList")}>
+          <button title="有序列表" onClick={() => toggleList("OL")}>
             <ListOrdered size={16} />
           </button>
         </div>
@@ -3236,10 +6670,10 @@ function KnowledgePanel({
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button title="增加缩进" onClick={() => execCommand("indent")}>
+          <button title="增加缩进" onClick={() => applyIndentChange(1)}>
             <IndentIncrease size={16} />
           </button>
-          <button title="减少缩进" onClick={() => execCommand("outdent")}>
+          <button title="减少缩进" onClick={() => applyIndentChange(-1)}>
             <IndentDecrease size={16} />
           </button>
         </div>
@@ -3249,13 +6683,18 @@ function KnowledgePanel({
         <div className="toolbar-group">
           <button
             className={knowledgeFormatBrush ? "active" : ""}
-            title={knowledgeFormatBrush ? "应用格式刷" : "复制格式"}
-            onClick={applyKnowledgeFormat}
-            onDoubleClick={() => setKnowledgeFormatBrush(null)}
+            title={knowledgeFormatBrush?.reusable ? "连续应用格式刷" : knowledgeFormatBrush ? "应用格式刷" : "复制格式"}
+            onClick={handleKnowledgeFormatBrushClick}
+            onDoubleClick={handleKnowledgeFormatBrushDoubleClick}
           >
             <Paintbrush size={16} />
           </button>
-          <button title="清除格式" onClick={() => execCommand("removeFormat")}>
+          {knowledgeFormatBrush && (
+            <button title="关闭格式刷" onClick={() => onKnowledgeFormatBrushChange(null)}>
+              <X size={16} />
+            </button>
+          )}
+          <button title="清除格式" onClick={clearFormatting}>
             <RotateCcw size={16} />
           </button>
         </div>
@@ -3263,6 +6702,13 @@ function KnowledgePanel({
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
+          <button
+            className="flowchart-button"
+            title="插入流程图"
+            onClick={insertFlowchart}
+          >
+            <GitBranchPlus size={16} />
+          </button>
           <button
             className="branch-map-button"
             disabled={!branchNode}
@@ -3272,9 +6718,46 @@ function KnowledgePanel({
             <GitFork size={16} />
           </button>
         </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <button
+            className={hideParentKnowledgePages ? "active" : ""}
+            title={hideParentKnowledgePages ? "开启父级知识点页" : "关闭父级知识点页"}
+            onClick={onToggleParentKnowledgePages}
+          >
+            <Settings size={16} />
+          </button>
+        </div>
+
+        <div className="toolbar-spacer" />
+
+        <div className="toolbar-group knowledge-page-nav" aria-label="有内容页面切换">
+          <button
+            aria-label="切换到上一页"
+            disabled={!onNavigatePreviousKnowledgePage}
+            onClick={navigatePreviousKnowledgePage}
+            title={previousKnowledgePageTitle ? `上一页：${previousKnowledgePageTitle}` : "没有上一页"}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            aria-label="切换到下一页"
+            disabled={!onNavigateNextKnowledgePage}
+            onClick={navigateNextKnowledgePage}
+            title={nextKnowledgePageTitle ? `下一页：${nextKnowledgePageTitle}` : "没有下一页"}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
 
-      <div className="knowledge-reader-stage">
+      <div
+        className="knowledge-reader-stage"
+        onWheel={handleKnowledgeWheel}
+        style={{ "--knowledge-zoom": knowledgeZoom } as React.CSSProperties}
+      >
         <div
           ref={editorRef}
           className="knowledge-editor"
@@ -3287,13 +6770,247 @@ function KnowledgePanel({
           onClick={handleEditorClick}
           onKeyDown={handleEditorKeyDown}
           onKeyUp={rememberSelection}
+          onSelect={rememberSelection}
           onMouseUp={rememberSelection}
           onBlur={flushDraft}
           data-placeholder="定义、重点、例子、易错点..."
           suppressContentEditableWarning
         />
       </div>
+      {flowchartEditor && (
+        <FlowchartEditorModal
+          state={flowchartEditor}
+          onChange={setFlowchartEditor}
+          onCancel={() => setFlowchartEditor(null)}
+          onSave={saveFlowchart}
+        />
+      )}
     </section>
+  );
+}
+
+function FlowchartEditorModal({
+  state,
+  onChange,
+  onCancel,
+  onSave
+}: {
+  state: FlowchartEditorState;
+  onChange: (state: FlowchartEditorState) => void;
+  onCancel: () => void;
+  onSave: (state: FlowchartEditorState) => void;
+}) {
+  const dragRef = useRef<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
+  const selectedNode = state.data.nodes.find((node) => node.id === state.selectedNodeId) ?? state.data.nodes[0] ?? null;
+  const nodeMap = new Map(state.data.nodes.map((node) => [node.id, node]));
+  const bounds = getFlowchartBounds(state.data);
+
+  const updateData = (updater: (data: KnowledgeFlowchart) => KnowledgeFlowchart) => {
+    onChange({ ...state, data: normalizeFlowchartData(updater(state.data)) });
+  };
+
+  const updateSelectedNode = (patch: Partial<FlowchartNode>) => {
+    if (!selectedNode) return;
+    updateData((data) => ({
+      ...data,
+      nodes: data.nodes.map((node) => node.id === selectedNode.id ? { ...node, ...patch } : node)
+    }));
+  };
+
+  const addNode = () => {
+    const node: FlowchartNode = {
+      id: crypto.randomUUID(),
+      label: "新节点",
+      kind: "process",
+      x: 120 + state.data.nodes.length * 32,
+      y: 190 + state.data.nodes.length * 18
+    };
+    onChange({
+      ...state,
+      selectedNodeId: node.id,
+      data: { ...state.data, nodes: [...state.data.nodes, node] }
+    });
+  };
+
+  const deleteSelectedNode = () => {
+    if (!selectedNode || state.data.nodes.length <= 1) return;
+    const nodes = state.data.nodes.filter((node) => node.id !== selectedNode.id);
+    onChange({
+      ...state,
+      selectedNodeId: nodes[0]?.id ?? "",
+      data: {
+        ...state.data,
+        nodes,
+        edges: state.data.edges.filter((edge) => edge.from !== selectedNode.id && edge.to !== selectedNode.id)
+      }
+    });
+  };
+
+  const addEdge = () => {
+    if (state.data.nodes.length < 2) return;
+    const from = selectedNode?.id ?? state.data.nodes[0].id;
+    const to = state.data.nodes.find((node) => node.id !== from)?.id ?? state.data.nodes[0].id;
+    updateData((data) => ({
+      ...data,
+      edges: [...data.edges, { id: crypto.randomUUID(), from, to, label: "" }]
+    }));
+  };
+
+  const updateEdge = (edgeId: string, patch: Partial<FlowchartEdge>) => {
+    updateData((data) => ({
+      ...data,
+      edges: data.edges.map((edge) => edge.id === edgeId ? { ...edge, ...patch } : edge)
+    }));
+  };
+
+  const deleteEdge = (edgeId: string) => {
+    updateData((data) => ({ ...data, edges: data.edges.filter((edge) => edge.id !== edgeId) }));
+  };
+
+  const startDragNode = (event: React.PointerEvent<SVGGElement>, node: FlowchartNode) => {
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = bounds.width / rect.width;
+    const scaleY = bounds.height / rect.height;
+    dragRef.current = {
+      nodeId: node.id,
+      offsetX: (event.clientX - rect.left) * scaleX - node.x,
+      offsetY: (event.clientY - rect.top) * scaleY - node.y
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    onChange({ ...state, selectedNodeId: node.id });
+  };
+
+  const dragNode = (event: React.PointerEvent<SVGSVGElement>) => {
+    const dragState = dragRef.current;
+    if (!dragState) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const scaleX = bounds.width / rect.width;
+    const scaleY = bounds.height / rect.height;
+    const x = Math.max(24, (event.clientX - rect.left) * scaleX - dragState.offsetX);
+    const y = Math.max(24, (event.clientY - rect.top) * scaleY - dragState.offsetY);
+    updateData((data) => ({
+      ...data,
+      nodes: data.nodes.map((node) => node.id === dragState.nodeId ? { ...node, x, y } : node)
+    }));
+  };
+
+  const stopDragNode = () => {
+    dragRef.current = null;
+  };
+
+  return (
+    <div className="flowchart-modal-backdrop" role="presentation">
+      <section className="flowchart-modal" role="dialog" aria-modal="true" aria-label="flowchart editor">
+        <header className="flowchart-modal-header">
+          <input
+            aria-label="流程图标题"
+            value={state.data.title}
+            onChange={(event) => updateData((data) => ({ ...data, title: event.target.value }))}
+          />
+          <div>
+            <button type="button" className="secondary-button" onClick={onCancel}>取消</button>
+            <button type="button" className="primary-button" onClick={() => onSave(state)}>保存</button>
+          </div>
+        </header>
+
+        <div className="flowchart-editor-grid">
+          <div className="flowchart-canvas-panel">
+            <svg
+              viewBox={`0 0 ${bounds.width} ${bounds.height}`}
+              onPointerMove={dragNode}
+              onPointerUp={stopDragNode}
+              onPointerCancel={stopDragNode}
+            >
+              <defs>
+                <marker id="flowchart-editor-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L8,3 z" />
+                </marker>
+              </defs>
+              {state.data.edges.map((edge) => {
+                const from = nodeMap.get(edge.from);
+                const to = nodeMap.get(edge.to);
+                if (!from || !to) return null;
+                const start = getFlowchartNodeCenter(from);
+                const end = getFlowchartNodeCenter(to);
+                return (
+                  <g key={edge.id}>
+                    <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} className="flowchart-edge-line" markerEnd="url(#flowchart-editor-arrow)" />
+                    {edge.label && (
+                      <text x={(start.x + end.x) / 2} y={(start.y + end.y) / 2 - 8} textAnchor="middle" className="flowchart-edge-label">
+                        {edge.label}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+              {state.data.nodes.map((node) => (
+                <g
+                  className={node.id === state.selectedNodeId ? "flowchart-editor-node selected" : "flowchart-editor-node"}
+                  key={node.id}
+                  onPointerDown={(event) => startDragNode(event, node)}
+                >
+                  {node.kind === "decision" ? (
+                    <polygon points={`${node.x + 64},${node.y} ${node.x + 128},${node.y + 28} ${node.x + 64},${node.y + 56} ${node.x},${node.y + 28}`} className="flowchart-node-shape decision" />
+                  ) : (
+                    <rect x={node.x} y={node.y} width={128} height={56} rx={node.kind === "process" ? 8 : 28} className={`flowchart-node-shape ${node.kind}`} />
+                  )}
+                  <text x={node.x + 64} y={node.y + 32} textAnchor="middle">{node.label}</text>
+                </g>
+              ))}
+            </svg>
+          </div>
+
+          <aside className="flowchart-side-panel">
+            <div className="flowchart-side-actions">
+              <button type="button" onClick={addNode}><Plus size={15} />节点</button>
+              <button type="button" onClick={deleteSelectedNode} disabled={!selectedNode || state.data.nodes.length <= 1}><Trash2 size={15} />节点</button>
+              <button type="button" onClick={addEdge} disabled={state.data.nodes.length < 2}><GitBranchPlus size={15} />连线</button>
+            </div>
+
+            {selectedNode && (
+              <div className="flowchart-fieldset">
+                <strong>节点</strong>
+                <label>
+                  <span>文案</span>
+                  <input value={selectedNode.label} onChange={(event) => updateSelectedNode({ label: event.target.value })} />
+                </label>
+                <label>
+                  <span>形状</span>
+                  <select value={selectedNode.kind} onChange={(event) => updateSelectedNode({ kind: event.target.value as FlowchartNodeKind })}>
+                    <option value="start">开始/结束</option>
+                    <option value="process">处理</option>
+                    <option value="decision">判断</option>
+                    <option value="end">结束</option>
+                  </select>
+                </label>
+              </div>
+            )}
+
+            <div className="flowchart-fieldset">
+              <strong>连线</strong>
+              <div className="flowchart-edge-list">
+                {state.data.edges.length === 0 ? (
+                  <span className="flowchart-empty">暂无连线</span>
+                ) : state.data.edges.map((edge) => (
+                  <div className="flowchart-edge-editor" key={edge.id}>
+                    <select value={edge.from} onChange={(event) => updateEdge(edge.id, { from: event.target.value })}>
+                      {state.data.nodes.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}
+                    </select>
+                    <select value={edge.to} onChange={(event) => updateEdge(edge.id, { to: event.target.value })}>
+                      {state.data.nodes.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}
+                    </select>
+                    <input placeholder="标签" value={edge.label} onChange={(event) => updateEdge(edge.id, { label: event.target.value })} />
+                    <button type="button" title="删除连线" onClick={() => deleteEdge(edge.id)}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
   );
 }
 

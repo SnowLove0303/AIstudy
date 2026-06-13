@@ -1,6 +1,6 @@
 {
   "name": "aistudy",
-  "version": "1.2.0",
+  "version": "1.2.147",
   "description": "AIstudy desktop learning system shell.",
   "author": "SnowLove0303",
   "private": true,
@@ -8,12 +8,18 @@
   "type": "commonjs",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "ai:daily": "powershell -ExecutionPolicy Bypass -File scripts/ai-daily-workflow.ps1",
     "build": "tsc -p tsconfig.electron.json && vite build",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder --win nsis",
-    "lint": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
+    "lint": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "code:lock": "powershell -ExecutionPolicy Bypass -File scripts/code-lock.ps1 -Action lock",
+    "code:unlock": "powershell -ExecutionPolicy Bypass -File scripts/code-lock.ps1 -Action unlock",
+    "code:lock:status": "powershell -ExecutionPolicy Bypass -File scripts/code-lock.ps1 -Action status",
+    "claude:sandbox:prepare": "powershell -ExecutionPolicy Bypass -File scripts/prepare-claude-sandbox.ps1"
   },
   "dependencies": {
+    "@hufe921/canvas-editor": "^0.9.135",
     "lucide-react": "^0.561.0",
     "mind-elixir": "^5.12.2",
     "mysql2": "^3.22.5",
@@ -45,10 +51,18 @@
       "dist-electron/**/*",
       "docs/**/*",
       "mcp/**/*",
+      "scripts/**/*",
       "assets/**/*",
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": [
+          "**/*"
+        ]
+      },
       {
         "from": "public",
         "to": "public",
