@@ -1,0 +1,24 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  winui-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore AIStudy.sln
+
+      - name: Build
+        run: dotnet build src/AIStudy.App/AIStudy.App.csproj --configuration Debug -p:Platform=x64 --no-restore
+

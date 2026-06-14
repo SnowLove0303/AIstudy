@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "AIStudy.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "AIStudy.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
