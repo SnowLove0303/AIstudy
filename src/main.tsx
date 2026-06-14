@@ -3056,11 +3056,10 @@ function MindMapEditor({
     setSelectedNodeId(id);
     setSelectedPageId(id);
     setSelectedNodeCount(1);
-    const isBranchNode = outlineParentIds.has(id);
     if (
-      id !== mainMindDataRef.current.nodeData.id
-      && (isBranchNode || upstreamBranchIsolationRef.current)
-      && openIsolatedBranchMindMap(id, isBranchNode && !upstreamBranchIsolationRef.current)
+      mode === "mindmap"
+      && id !== mainMindDataRef.current.nodeData.id
+      && openIsolatedBranchMindMap(id, !upstreamBranchIsolationRef.current)
     ) {
       return;
     }
@@ -3113,10 +3112,9 @@ function MindMapEditor({
     }
     if (
       selectedPageId !== rootNodeId
-      && (outlineParentIdsRef.current.has(selectedPageId) || upstreamBranchIsolationRef.current)
       && openIsolatedBranchMindMap(
         selectedPageId,
-        outlineParentIdsRef.current.has(selectedPageId) && !upstreamBranchIsolationRef.current
+        !upstreamBranchIsolationRef.current
       )
     ) {
       return;

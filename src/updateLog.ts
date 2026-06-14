@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.172",
+    date: "2026-06-15",
+    title: "局部思维导图切换修复",
+    featureUpdates: ["思维导图目录点击任意非根节点时，只呈现该节点及其下级的局部导图"],
+    fixes: ["修复点击最末子级或更深层子级时画布回退到主思维导图的问题"],
+    optimizations: ["课程逻辑检查新增局部分支打开守卫，防止再次只按父节点判断"]
+  },
+  {
     version: "1.2.171",
     date: "2026-06-15",
     title: "分支同步逻辑拆分",

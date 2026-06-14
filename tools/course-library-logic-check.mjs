@@ -98,6 +98,15 @@ const implementationRules = [
     ]
   },
   {
+    label: "mind-map outline clicks open any non-root node as a local branch",
+    file: "src/main.tsx",
+    markers: [
+      'mode === "mindmap"',
+      "id !== mainMindDataRef.current.nodeData.id",
+      "openIsolatedBranchMindMap(id, !upstreamBranchIsolationRef.current)"
+    ]
+  },
+  {
     label: "parent nodes can show a temporary child outline",
     file: "src/main.tsx",
     markers: ["shouldShowAutoBranchOutline", "renderCanvasMindBranchHtml(activeBranchNode)", "isAutoOutline"]
@@ -462,6 +471,9 @@ async function main() {
   }
   if (!branchSyncText.includes("activeBranchCanvasId && activeBranchCanvasId === canvasRootId")) {
     fail("Branch sync logic must keep edits bound to the active branch root.");
+  }
+  if (rendererText.includes("outlineParentIds.has(id)") && rendererText.includes("openIsolatedBranchMindMap(id")) {
+    fail("Mind-map branch opening must not be limited to parent nodes only.");
   }
   if (mindMapText.includes("topic: frozenItem.topic")) {
     fail("Frozen outline snapshot must not freeze node titles; existing titles must follow mind map edits.");
