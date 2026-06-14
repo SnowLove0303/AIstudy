@@ -103,7 +103,7 @@ const implementationRules = [
     markers: [
       'mode === "mindmap"',
       "id !== mainMindDataRef.current.nodeData.id",
-      "openIsolatedBranchMindMap(id, !upstreamBranchIsolationRef.current)"
+      "if (!openIsolatedBranchMindMap(id, !upstreamBranchIsolationRef.current))"
     ]
   },
   {
@@ -474,6 +474,9 @@ async function main() {
   }
   if (rendererText.includes("outlineParentIds.has(id)") && rendererText.includes("openIsolatedBranchMindMap(id")) {
     fail("Mind-map branch opening must not be limited to parent nodes only.");
+  }
+  if (rendererText.includes("focusMindNode(selectedPageId);")) {
+    fail("Mind-map mode must not fall back to focusing selected nodes on the main map.");
   }
   if (mindMapText.includes("topic: frozenItem.topic")) {
     fail("Frozen outline snapshot must not freeze node titles; existing titles must follow mind map edits.");

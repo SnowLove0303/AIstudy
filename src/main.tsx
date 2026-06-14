@@ -3056,11 +3056,10 @@ function MindMapEditor({
     setSelectedNodeId(id);
     setSelectedPageId(id);
     setSelectedNodeCount(1);
-    if (
-      mode === "mindmap"
-      && id !== mainMindDataRef.current.nodeData.id
-      && openIsolatedBranchMindMap(id, !upstreamBranchIsolationRef.current)
-    ) {
+    if (mode === "mindmap" && id !== mainMindDataRef.current.nodeData.id) {
+      if (!openIsolatedBranchMindMap(id, !upstreamBranchIsolationRef.current)) {
+        setToolHint("未找到可切出的局部思维导图");
+      }
       return;
     }
     if (isIsolatedBranchSession()) {
@@ -3110,16 +3109,12 @@ function MindMapEditor({
       focusRootMindMap();
       return;
     }
-    if (
-      selectedPageId !== rootNodeId
-      && openIsolatedBranchMindMap(
-        selectedPageId,
-        !upstreamBranchIsolationRef.current
-      )
-    ) {
+    if (selectedPageId !== rootNodeId) {
+      if (!openIsolatedBranchMindMap(selectedPageId, !upstreamBranchIsolationRef.current)) {
+        setToolHint("未找到可切出的局部思维导图");
+      }
       return;
     }
-    focusMindNode(selectedPageId);
   }, [mode, shouldMountMindMap, selectedPageId]);
 
   const syncMindData = () => {

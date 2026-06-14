@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.173",
+    date: "2026-06-15",
+    title: "局部分支强制切出",
+    featureUpdates: ["思维导图模式点击非根目录项时直接切出该节点的局部导图"],
+    fixes: ["修复局部分支切换失败后继续回到主思维导图定位的问题"],
+    optimizations: ["课程逻辑检查阻止思维导图模式回退到主图节点定位"]
+  },
+  {
     version: "1.2.172",
     date: "2026-06-15",
     title: "局部思维导图切换修复",
