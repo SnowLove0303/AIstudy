@@ -34,5 +34,13 @@ interface Window {
       run: (payload: unknown) => Promise<unknown>;
       openArtifact: (filePath: unknown) => Promise<unknown>;
     };
+    updates?: {
+      status: () => Promise<unknown>;
+      check: () => Promise<unknown>;
+      download: () => Promise<unknown>;
+      install: () => Promise<unknown>;
+      openReleasePage: () => Promise<unknown>;
+      onStatus: (callback: (status: unknown) => void) => () => void;
+    };
   };
 }

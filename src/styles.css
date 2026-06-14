@@ -3275,6 +3275,137 @@ h1 {
   gap: 12px;
 }
 
+.update-check-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(13, 148, 136, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow);
+}
+
+.update-check-main,
+.update-actions,
+.update-check-grid {
+  display: flex;
+  align-items: center;
+}
+
+.update-check-main {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.update-source {
+  display: inline-flex;
+  margin-bottom: 4px;
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.update-check-main h2 {
+  font-size: 22px;
+}
+
+.update-state {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--ink-700);
+  background: rgba(100, 116, 139, 0.12);
+  font-weight: 800;
+}
+
+.update-state.available {
+  color: #fff;
+  background: var(--teal);
+}
+
+.update-state.error {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.update-check-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.update-check-grid div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.update-check-grid span,
+.update-check-grid strong {
+  display: block;
+}
+
+.update-check-grid span {
+  margin-bottom: 5px;
+  color: var(--ink-500);
+  font-size: 13px;
+}
+
+.update-check-grid strong {
+  overflow: hidden;
+  color: var(--ink-950);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(13, 148, 136, 0.12);
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--teal);
+  transition: width 180ms ease;
+}
+
+.update-error {
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.update-actions {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.update-actions button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  border-radius: 8px;
+  color: var(--teal);
+  background: var(--teal-soft);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.update-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .version-card {
   overflow: hidden;
   border: 1px solid var(--line);

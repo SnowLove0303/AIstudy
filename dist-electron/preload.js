@@ -33,5 +33,17 @@ electron_1.contextBridge.exposeInMainWorld("aistudy", {
         latest: () => electron_1.ipcRenderer.invoke("ai-daily:latest"),
         run: (payload) => electron_1.ipcRenderer.invoke("ai-daily:run", payload),
         openArtifact: (filePath) => electron_1.ipcRenderer.invoke("ai-daily:open-artifact", filePath)
+    },
+    updates: {
+        status: () => electron_1.ipcRenderer.invoke("updates:status"),
+        check: () => electron_1.ipcRenderer.invoke("updates:check"),
+        download: () => electron_1.ipcRenderer.invoke("updates:download"),
+        install: () => electron_1.ipcRenderer.invoke("updates:install"),
+        openReleasePage: () => electron_1.ipcRenderer.invoke("updates:open-release-page"),
+        onStatus: (callback) => {
+            const listener = (_event, status) => callback(status);
+            electron_1.ipcRenderer.on("updates:status", listener);
+            return () => electron_1.ipcRenderer.removeListener("updates:status", listener);
+        }
     }
 });

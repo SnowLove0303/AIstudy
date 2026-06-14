@@ -36,6 +36,8 @@ import {
   ChevronUp,
   CirclePlay,
   Clock3,
+  Download,
+  ExternalLink,
   FileText,
   GitBranchPlus,
   GitFork,
@@ -333,6 +335,33 @@ type McpPhaseItem = {
   ready: boolean;
   progress: number;
   icon: React.ReactNode;
+};
+type AppUpdatePhase =
+  | "idle"
+  | "checking"
+  | "available"
+  | "not-available"
+  | "downloading"
+  | "downloaded"
+  | "installing"
+  | "error";
+type AppUpdateStatus = {
+  phase: AppUpdatePhase;
+  currentVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  canCheck: boolean;
+  canDownload: boolean;
+  canInstall: boolean;
+  isPackaged: boolean;
+  source: string;
+  releasePageUrl: string;
+  message: string;
+  error?: string;
+  releaseName?: string;
+  releaseDate?: string;
+  downloadPercent?: number;
+  downloadedFile?: string;
 };
 
 const mascotUrl = `${import.meta.env.BASE_URL}mascot.png`;
@@ -1580,9 +1609,129 @@ function UpdateManager() {
     b.version.localeCompare(a.version, undefined, { numeric: true })
   );
   const [openVersion, setOpenVersion] = useState(sortedUpdates[0]?.version ?? "");
+  const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+
+  const normalizeUpdateStatus = (value: unknown): AppUpdateStatus | null => {
+    if (!value || typeof value !== "object") return null;
+    const status = value as Partial<AppUpdateStatus>;
+    if (typeof status.phase !== "string" || typeof status.currentVersion !== "string") return null;
+    return {
+      phase: status.phase as AppUpdatePhase,
+      currentVersion: status.currentVersion,
+      latestVersion: typeof status.latestVersion === "string" ? status.latestVersion : null,
+      updateAvailable: Boolean(status.updateAvailable),
+      canCheck: Boolean(status.canCheck),
+      canDownload: Boolean(status.canDownload),
+      canInstall: Boolean(status.canInstall),
+      isPackaged: Boolean(status.isPackaged),
+      source: typeof status.source === "string" ? status.source : "GitHub Releases",
+      releasePageUrl: typeof status.releasePageUrl === "string" ? status.releasePageUrl : "",
+      message: typeof status.message === "string" ? status.message : "等待检查更新",
+      error: typeof status.error === "string" ? status.error : undefined,
+      releaseName: typeof status.releaseName === "string" ? status.releaseName : undefined,
+      releaseDate: typeof status.releaseDate === "string" ? status.releaseDate : undefined,
+      downloadPercent: typeof status.downloadPercent === "number" ? status.downloadPercent : undefined,
+      downloadedFile: typeof status.downloadedFile === "string" ? status.downloadedFile : undefined
+    };
+  };
+
+  const applyUpdateStatus = (value: unknown) => {
+    const nextStatus = normalizeUpdateStatus(value);
+    if (nextStatus) setUpdateStatus(nextStatus);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = window.aistudy?.updates?.onStatus?.((status) => {
+      if (!cancelled) applyUpdateStatus(status);
+    });
+    void window.aistudy?.updates?.status?.().then((status) => {
+      if (!cancelled) applyUpdateStatus(status);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  const runUpdateAction = async (action: "check" | "download" | "install" | "open") => {
+    setUpdateBusy(true);
+    try {
+      const api = window.aistudy?.updates;
+      const result = action === "check"
+        ? await api?.check?.()
+        : action === "download"
+          ? await api?.download?.()
+          : action === "install"
+            ? await api?.install?.()
+            : await api?.openReleasePage?.();
+      if (action !== "open") applyUpdateStatus(result);
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const status = updateStatus;
+  const progress = Math.round(status?.downloadPercent ?? 0);
+  const releaseDate = status?.releaseDate ? new Date(status.releaseDate).toLocaleDateString("zh-CN") : "";
 
   return (
     <section className="update-manager" aria-label="更新管理">
+      <article className="update-check-panel">
+        <div className="update-check-main">
+          <div>
+            <span className="update-source">{status?.source ?? "GitHub Releases"}</span>
+            <h2>版本检测</h2>
+          </div>
+          <div className={status?.updateAvailable ? "update-state available" : status?.phase === "error" ? "update-state error" : "update-state"}>
+            {status?.message ?? "等待检查更新"}
+          </div>
+        </div>
+
+        <div className="update-check-grid">
+          <div>
+            <span>当前版本</span>
+            <strong>v{status?.currentVersion ?? sortedUpdates[0]?.version ?? "未知"}</strong>
+          </div>
+          <div>
+            <span>远端版本</span>
+            <strong>{status?.latestVersion ? `v${status.latestVersion}` : "待检测"}</strong>
+          </div>
+          <div>
+            <span>发布信息</span>
+            <strong>{status?.releaseName || releaseDate || "GitHub Release"}</strong>
+          </div>
+        </div>
+
+        {(status?.phase === "downloading" || status?.phase === "downloaded") && (
+          <div className="update-progress" aria-label="下载进度">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        )}
+
+        {status?.error && <p className="update-error">{status.error}</p>}
+
+        <div className="update-actions">
+          <button disabled={updateBusy || status?.canCheck === false} onClick={() => void runUpdateAction("check")}>
+            <RotateCcw size={16} />
+            检查更新
+          </button>
+          <button disabled={updateBusy || !status?.canDownload} onClick={() => void runUpdateAction("download")}>
+            <Download size={16} />
+            下载更新
+          </button>
+          <button disabled={updateBusy || !status?.canInstall} onClick={() => void runUpdateAction("install")}>
+            <CirclePlay size={16} />
+            重启安装
+          </button>
+          <button onClick={() => void runUpdateAction("open")}>
+            <ExternalLink size={16} />
+            发布页
+          </button>
+        </div>
+      </article>
+
       {sortedUpdates.map((entry, index) => {
         const isOpen = openVersion === entry.version;
         return (

@@ -81,6 +81,10 @@ const requiredIpcPairs = [
   ["ports.startService", "ports:start-service"],
   ["aiDaily.latest", "ai-daily:latest"],
   ["aiDaily.run", "ai-daily:run"],
+  ["updates.status", "updates:status"],
+  ["updates.check", "updates:check"],
+  ["updates.download", "updates:download"],
+  ["updates.install", "updates:install"],
   ["mcp.notionImportStatus", "mcp:notion-import-status"]
 ];
 

@@ -61,6 +61,7 @@ npm run check:course-logic
 npm run check:system
 npm run build
 npm run pack
+npm run dist
 ```
 
 `npm run pack` 固定输出到：
@@ -68,6 +69,8 @@ npm run pack
 ```text
 release\win-unpacked\AIstudy.exe
 ```
+
+`npm run dist` 生成自动更新所需的 NSIS 安装包、`latest.yml` 和 blockmap。推送 `v*` 标签后，`.github/workflows/release.yml` 会在 GitHub Releases 发布这些文件。
 
 不要再创建 `release-fixed`、`release-local-electron`、`release-mindmap-*`、`release-chatgpt-*` 等旁路目录。
 
@@ -78,7 +81,11 @@ release\win-unpacked\AIstudy.exe
 3. 执行 `npm run lint`。
 4. 执行 `npm run pack`。
 5. 从 `release\win-unpacked\AIstudy.exe` 启动验证。
-6. 确认 `src/updateLog.ts` 最新版本可在更新管理中看到。
+6. 正式发版时打标签并推送，例如 `git tag v1.2.162 && git push origin v1.2.162`。
+7. 确认 GitHub Releases 生成安装包和 `latest.yml`。
+8. 确认 `src/updateLog.ts` 最新版本可在更新管理中看到。
+
+自动更新源必须对 B 设备匿名可见。若源码仓库是私有仓库，正式安装包应发布到公开 Release 仓库，再把 `package.json` 的 `build.publish.repo` 改为该公开仓库。
 
 ## 功能关系文档
 

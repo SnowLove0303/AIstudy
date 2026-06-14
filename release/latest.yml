@@ -1,8 +1,8 @@
-version: 1.2.147
+version: 1.2.163
 files:
-  - url: AIstudy-Setup-1.2.147.exe
-    sha512: fqgwey9qVciz1vHKPIKS7oBHv4cRdQAyG2Vaml6LdQ/WwURxiD1CNk7A7C6WDSWFTIjLiIz/vUmX8VbgBPvYmA==
-    size: 104530545
-path: AIstudy-Setup-1.2.147.exe
-sha512: fqgwey9qVciz1vHKPIKS7oBHv4cRdQAyG2Vaml6LdQ/WwURxiD1CNk7A7C6WDSWFTIjLiIz/vUmX8VbgBPvYmA==
-releaseDate: '2026-06-13T20:18:47.607Z'
+  - url: AIstudy-Setup-1.2.163.exe
+    sha512: 3IFBi3lugBYI1osf8kJAh0s/n71tBDHYYAltk6h8dz6o96gINkCNSha3QEPa7z6yl2iqakgMdBkTlPKta1+t4g==
+    size: 104838086
+path: AIstudy-Setup-1.2.163.exe
+sha512: 3IFBi3lugBYI1osf8kJAh0s/n71tBDHYYAltk6h8dz6o96gINkCNSha3QEPa7z6yl2iqakgMdBkTlPKta1+t4g==
+releaseDate: '2026-06-14T11:16:20.851Z'

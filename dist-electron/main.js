@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
+const electron_updater_1 = require("electron-updater");
 const node_child_process_1 = require("node:child_process");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const iconv_lite_1 = __importDefault(require("iconv-lite"));
@@ -23,6 +24,11 @@ const chatgptWebLoginPort = Number(process.env.AISTUDY_CHATGPT_WEB_LOGIN_PORT
     || process.env.AISTUDY_CHATGPT_LOGIN_PORT
     || 9230);
 const chatgptWebLoginCdpUrl = getManagedPortCdpUrl(chatgptWebLoginPort);
+const updateGithubOwner = "SnowLove0303";
+const updateGithubRepo = "AIstudy";
+const updateReleasePageUrl = "https://github.com/SnowLove0303/AIstudy/releases";
+const updateSourceLabel = "GitHub Releases";
+const updateFeedUrl = `https://github.com/${updateGithubOwner}/${updateGithubRepo}/releases.atom`;
 let mysqlPool = null;
 let mysqlUnavailableLogged = false;
 let mysqlStartAttempted = false;
@@ -2555,6 +2561,245 @@ async function getSystemContextInfo() {
         }
     };
 }
+electron_updater_1.autoUpdater.autoDownload = false;
+electron_updater_1.autoUpdater.autoInstallOnAppQuit = false;
+let appUpdateStatus = createBaseUpdateStatus();
+function createBaseUpdateStatus(patch = {}) {
+    return {
+        phase: "idle",
+        currentVersion: electron_1.app.getVersion(),
+        latestVersion: null,
+        updateAvailable: false,
+        canCheck: true,
+        canDownload: false,
+        canInstall: false,
+        isPackaged: electron_1.app.isPackaged,
+        source: updateSourceLabel,
+        releasePageUrl: updateReleasePageUrl,
+        message: "等待检查更新",
+        ...patch
+    };
+}
+function normalizeUpdateError(error) {
+    const message = error instanceof Error ? error.message : String(error || "未知错误");
+    if (message.includes("releases.atom") && message.includes("404")) {
+        return "GitHub Releases 无法匿名访问。请确认仓库 Release 已发布且更新源仓库为公开仓库，或改用公开的 AIstudy-releases 仓库。";
+    }
+    if (message.includes("latest.yml") && message.includes("404")) {
+        return "没有找到 latest.yml。请先发布正式 Release，确保安装包、blockmap 和 latest.yml 都在 Release 附件中。";
+    }
+    return message;
+}
+async function checkUpdateFeedAvailability() {
+    try {
+        const response = await fetch(updateFeedUrl, {
+            method: "GET",
+            headers: { "user-agent": "AIstudy AutoUpdater" }
+        });
+        if (response.ok)
+            return { ok: true };
+        if (response.status === 404) {
+            return {
+                ok: false,
+                message: "GitHub Releases 无法匿名访问。请确认仓库 Release 已发布且更新源仓库为公开仓库。"
+            };
+        }
+        return {
+            ok: false,
+            message: `GitHub Releases 返回 ${response.status}，暂时无法检查更新。`
+        };
+    }
+    catch (error) {
+        return {
+            ok: false,
+            message: `无法连接 GitHub Releases：${normalizeUpdateError(error)}`
+        };
+    }
+}
+function getDownloadedFilePath(event) {
+    const candidate = event;
+    if (typeof candidate.downloadedFile === "string")
+        return candidate.downloadedFile;
+    if (typeof candidate.path === "string")
+        return candidate.path;
+    return undefined;
+}
+function updateAppUpdateStatus(patch) {
+    appUpdateStatus = createBaseUpdateStatus({ ...appUpdateStatus, ...patch });
+    for (const window of electron_1.BrowserWindow.getAllWindows()) {
+        window.webContents.send("updates:status", appUpdateStatus);
+    }
+    return appUpdateStatus;
+}
+function getAppUpdateStatus() {
+    return updateAppUpdateStatus({});
+}
+function registerUpdateEvents() {
+    electron_updater_1.autoUpdater.on("checking-for-update", () => {
+        updateAppUpdateStatus({
+            phase: "checking",
+            message: "正在检查 GitHub Releases",
+            error: undefined,
+            canCheck: false,
+            canDownload: false,
+            canInstall: false,
+            downloadPercent: undefined
+        });
+    });
+    electron_updater_1.autoUpdater.on("update-available", (info) => {
+        updateAppUpdateStatus({
+            phase: "available",
+            latestVersion: info.version ?? null,
+            releaseDate: info.releaseDate,
+            releaseName: info.releaseName ?? undefined,
+            updateAvailable: true,
+            canCheck: true,
+            canDownload: true,
+            canInstall: false,
+            message: `发现新版本 ${info.version ?? ""}`.trim()
+        });
+    });
+    electron_updater_1.autoUpdater.on("update-not-available", (info) => {
+        updateAppUpdateStatus({
+            phase: "not-available",
+            latestVersion: info.version ?? electron_1.app.getVersion(),
+            releaseDate: info.releaseDate,
+            releaseName: info.releaseName ?? undefined,
+            updateAvailable: false,
+            canCheck: true,
+            canDownload: false,
+            canInstall: false,
+            message: "当前已是最新版本"
+        });
+    });
+    electron_updater_1.autoUpdater.on("download-progress", (progress) => {
+        updateAppUpdateStatus({
+            phase: "downloading",
+            canCheck: false,
+            canDownload: false,
+            canInstall: false,
+            downloadPercent: Math.max(0, Math.min(100, progress.percent || 0)),
+            message: `正在下载 ${Math.round(progress.percent || 0)}%`
+        });
+    });
+    electron_updater_1.autoUpdater.on("update-downloaded", (event) => {
+        updateAppUpdateStatus({
+            phase: "downloaded",
+            latestVersion: event.version ?? appUpdateStatus.latestVersion,
+            releaseDate: event.releaseDate,
+            releaseName: event.releaseName ?? undefined,
+            updateAvailable: true,
+            canCheck: true,
+            canDownload: false,
+            canInstall: true,
+            downloadPercent: 100,
+            downloadedFile: getDownloadedFilePath(event),
+            message: "新版本已下载，重启后安装"
+        });
+    });
+    electron_updater_1.autoUpdater.on("error", (error) => {
+        updateAppUpdateStatus({
+            phase: "error",
+            canCheck: true,
+            canDownload: appUpdateStatus.updateAvailable,
+            canInstall: appUpdateStatus.canInstall,
+            error: normalizeUpdateError(error),
+            message: "更新检查失败"
+        });
+    });
+}
+async function checkForAppUpdates() {
+    if (!electron_1.app.isPackaged) {
+        return updateAppUpdateStatus({
+            phase: "idle",
+            canCheck: true,
+            canDownload: false,
+            canInstall: false,
+            message: "开发环境不执行自动安装，请使用打包版本检查更新",
+            error: undefined
+        });
+    }
+    try {
+        updateAppUpdateStatus({
+            phase: "checking",
+            canCheck: false,
+            canDownload: false,
+            canInstall: false,
+            error: undefined,
+            message: "正在检查 GitHub Releases"
+        });
+        const feedStatus = await checkUpdateFeedAvailability();
+        if (!feedStatus.ok) {
+            return updateAppUpdateStatus({
+                phase: "error",
+                canCheck: true,
+                canDownload: false,
+                canInstall: false,
+                error: feedStatus.message,
+                message: "更新源不可访问"
+            });
+        }
+        await electron_updater_1.autoUpdater.checkForUpdates();
+        return appUpdateStatus;
+    }
+    catch (error) {
+        return updateAppUpdateStatus({
+            phase: "error",
+            canCheck: true,
+            canDownload: false,
+            canInstall: false,
+            error: normalizeUpdateError(error),
+            message: "更新检查失败"
+        });
+    }
+}
+async function downloadAppUpdate() {
+    if (!electron_1.app.isPackaged)
+        return checkForAppUpdates();
+    if (!appUpdateStatus.updateAvailable) {
+        await checkForAppUpdates();
+        if (!appUpdateStatus.updateAvailable)
+            return appUpdateStatus;
+    }
+    try {
+        updateAppUpdateStatus({
+            phase: "downloading",
+            canCheck: false,
+            canDownload: false,
+            canInstall: false,
+            error: undefined,
+            message: "正在下载新版本"
+        });
+        await electron_updater_1.autoUpdater.downloadUpdate();
+        return appUpdateStatus;
+    }
+    catch (error) {
+        return updateAppUpdateStatus({
+            phase: "error",
+            canCheck: true,
+            canDownload: true,
+            canInstall: false,
+            error: normalizeUpdateError(error),
+            message: "下载更新失败"
+        });
+    }
+}
+function installDownloadedAppUpdate() {
+    if (!appUpdateStatus.canInstall) {
+        return updateAppUpdateStatus({
+            message: "还没有可安装的更新包"
+        });
+    }
+    updateAppUpdateStatus({
+        phase: "installing",
+        canCheck: false,
+        canDownload: false,
+        canInstall: false,
+        message: "正在重启安装"
+    });
+    setImmediate(() => electron_updater_1.autoUpdater.quitAndInstall(false, true));
+    return appUpdateStatus;
+}
 function registerDataHandlers() {
     electron_1.ipcMain.handle("courses:load", async () => loadCourseDatabase());
     electron_1.ipcMain.handle("courses:save", async (_event, courses) => saveCourseDatabase(courses));
@@ -2570,6 +2815,11 @@ function registerDataHandlers() {
     electron_1.ipcMain.handle("ai-daily:latest", async () => getLatestAiDailyManifest());
     electron_1.ipcMain.handle("ai-daily:run", async (_event, request) => runAiDailyWorkflow(request));
     electron_1.ipcMain.handle("ai-daily:open-artifact", async (_event, filePath) => openAiDailyArtifact(filePath));
+    electron_1.ipcMain.handle("updates:status", async () => getAppUpdateStatus());
+    electron_1.ipcMain.handle("updates:check", async () => checkForAppUpdates());
+    electron_1.ipcMain.handle("updates:download", async () => downloadAppUpdate());
+    electron_1.ipcMain.handle("updates:install", async () => installDownloadedAppUpdate());
+    electron_1.ipcMain.handle("updates:open-release-page", async () => electron_1.shell.openExternal(updateReleasePageUrl));
     electron_1.ipcMain.handle("mcp:notion-import-status", async () => {
         const contractPath = getPackagedResourcePath("mcp", "aistudy-notion-knowledge-import.contract.json");
         const guidePath = getPackagedResourcePath("docs", "mcp-notion-knowledge-import.md");
@@ -2652,6 +2902,7 @@ electron_1.app.whenReady().then(() => {
     electron_1.Menu.setApplicationMenu(null);
     void fixWindowsShortcutIcons();
     void ensureMysqlServerStarted();
+    registerUpdateEvents();
     registerDataHandlers();
     createWindow();
     electron_1.app.on("activate", () => {

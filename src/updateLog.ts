@@ -9,6 +9,22 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.163",
+    date: "2026-06-14",
+    title: "更新源不可访问提示",
+    featureUpdates: ["更新检测会先确认 GitHub Releases 是否可访问"],
+    fixes: ["修复私有仓库或未发布 Release 时直接显示 GitHub 404 原始报错的问题"],
+    optimizations: ["更新管理会提示公开发布源和 latest.yml 要求，便于排查 B 设备无法更新的问题"]
+  },
+  {
+    version: "1.2.162",
+    date: "2026-06-14",
+    title: "应用自动更新检测",
+    featureUpdates: ["更新管理新增 GitHub Releases 版本检测、下载更新和重启安装入口"],
+    fixes: ["补齐主进程、预加载和页面之间的更新状态同步"],
+    optimizations: ["新增无服务器发版流程，推送版本标签后可自动生成更新安装包"]
+  },
+  {
     version: "1.2.161",
     date: "2026-06-14",
     title: "课程库底层规则固化",

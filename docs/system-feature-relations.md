@@ -161,6 +161,37 @@ flowchart LR
 - JSON 与 MySQL 同时存在时，以时间戳较新的为准，并异步回填另一端。
 - 新增库类型必须同时补齐：渲染层 `CourseCollectionConfig`、主进程 `databaseCollectionIndex`、preload API、IPC handler、数据文件名、验证清单。
 
+## 自动更新关系
+
+更新管理分为两层：本地版本记录来自 `src/updateLog.ts`，远端安装更新来自 GitHub Releases。
+
+```mermaid
+flowchart LR
+  Tag["v* 标签"]
+  Action["GitHub Actions"]
+  Release["GitHub Releases"]
+  Latest["latest.yml"]
+  App["AIstudy 更新管理"]
+  Updater["electron-updater"]
+  Installer["NSIS 安装包"]
+
+  Tag --> Action
+  Action --> Release
+  Release --> Latest
+  Release --> Installer
+  App --> Updater
+  Updater --> Latest
+  Updater --> Installer
+```
+
+必须保持这些边界：
+
+- `npm run pack` 只用于本机固定入口 `release\win-unpacked\AIstudy.exe`。
+- `npm run dist` 用于正式自动更新发版，必须生成安装包、`latest.yml` 和 blockmap。
+- B 设备只能安装 GitHub Releases 中已发布的版本，不能直接根据 git commit 自动更新。
+- GitHub 更新源必须能被 B 设备匿名访问；源码仓库保持私有时，应把安装包发布到公开的 Release 仓库。
+- 更新管理页面只触发检查、下载和重启安装；安装包下载、校验和替换由 `electron-updater` 处理。
+
 ## AI 问答关系
 
 ```mermaid
