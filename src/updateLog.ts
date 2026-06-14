@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.165",
+    date: "2026-06-14",
+    title: "分支目录标题同步",
+    featureUpdates: ["分支思维导图中编辑已有子级标题后，左侧目录会同步显示新名称"],
+    fixes: ["修复目录冻结编号时误把节点标题也冻结，导致父子级子目录名称与导图不一致的问题"],
+    optimizations: ["课程库检查新增目录快照标题同步守卫，防止后续改动再次冻结节点名称"]
+  },
+  {
     version: "1.2.164",
     date: "2026-06-14",
     title: "更新发布流程标准化",

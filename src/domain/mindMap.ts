@@ -79,7 +79,7 @@ export function applyNumberedOutlineSnapshot(nextOutline: OutlineItem[], snapsho
       if (item.depth < outlineDirectoryFreezeDepth) return item;
       const frozenItem = snapshotItems.get(item.id);
       return frozenItem
-        ? { ...item, topic: frozenItem.topic, numbering: frozenItem.numbering }
+        ? { ...item, numbering: frozenItem.numbering }
         : item;
     });
 }

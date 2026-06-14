@@ -344,6 +344,9 @@ async function main() {
   if (!mindMapText.includes("if (item.depth < outlineDirectoryFreezeDepth) return item")) {
     fail("Frozen outline snapshot must not override parent/depth for non-frozen levels.");
   }
+  if (mindMapText.includes("topic: frozenItem.topic")) {
+    fail("Frozen outline snapshot must not freeze node titles; existing titles must follow mind map edits.");
+  }
 
   const dataDir = path.join(process.env.APPDATA || "", "aistudy", "data");
   const coursesPath = path.join(dataDir, "courses.json");
