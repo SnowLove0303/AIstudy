@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.170",
+    date: "2026-06-15",
+    title: "目录面板组件拆分",
+    featureUpdates: ["目录、知识点和思维导图继续按同一 nodeId 保持联动"],
+    fixes: ["降低目录展示代码和课程底层关联逻辑混在一起导致改动互相影响的风险"],
+    optimizations: ["左侧目录面板拆为独立组件，底层关联判断继续由领域逻辑统一提供"]
+  },
+  {
     version: "1.2.169",
     date: "2026-06-15",
     title: "课程关联逻辑拆分",

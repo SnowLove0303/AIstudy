@@ -61,6 +61,24 @@ const implementationRules = [
     ]
   },
   {
+    label: "course outline UI is isolated from workspace state logic",
+    file: "src/components/CourseOutlinePanel.tsx",
+    markers: [
+      "export function CourseOutlinePanel",
+      "visibleOutline.map",
+      "toggleOutlineCollapse(item.id)"
+    ]
+  },
+  {
+    label: "course workspace renders the isolated outline panel",
+    file: "src/main.tsx",
+    markers: [
+      "<CourseOutlinePanel",
+      "visibleOutline={visibleOutline}",
+      "focusOutlineNode={focusOutlineNode}"
+    ]
+  },
+  {
     label: "parent nodes can show a temporary child outline",
     file: "src/main.tsx",
     markers: ["shouldShowAutoBranchOutline", "renderCanvasMindBranchHtml(activeBranchNode)", "isAutoOutline"]
