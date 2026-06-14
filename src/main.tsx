@@ -84,6 +84,15 @@ import {
 } from "lucide-react";
 import { updateLog, type UpdateLogEntry } from "./updateLog";
 import { createCourse, normalizeCourses } from "./domain/course";
+import {
+  createBranchMindMapStatePatch,
+  createCollapsedOutlineStatePatch,
+  createHideParentKnowledgePagesPatch,
+  createKnowledgeDocumentStatePatch,
+  createKnowledgePointStatePatch,
+  createMindMapStatePatch,
+  createOutlineSyncStatePatch
+} from "./domain/courseState";
 import { escapeHtml } from "./domain/html";
 import {
   applyNumberedOutlineSnapshot,
@@ -2587,44 +2596,28 @@ function CourseDetail({
           onMindFormatBrushChange={setMindFormatBrush}
           knowledgeFormatBrush={knowledgeFormatBrush}
           onKnowledgeFormatBrushChange={setKnowledgeFormatBrush}
-          onChange={(mindMap) => onUpdateCourse(course.id, { mindMap })}
+          onChange={(mindMap) =>
+            onUpdateCourse(course.id, (currentCourse) => createMindMapStatePatch(currentCourse, mindMap))
+          }
           onOutlineSyncStateChange={(syncNumberedOutline, numberedOutlineSnapshot) =>
-            onUpdateCourse(course.id, { syncNumberedOutline, numberedOutlineSnapshot })
+            onUpdateCourse(course.id, (currentCourse) =>
+              createOutlineSyncStatePatch(currentCourse, syncNumberedOutline, numberedOutlineSnapshot)
+            )
           }
           onCollapsedOutlineChange={(collapsedOutlineIds) =>
-            onUpdateCourse(course.id, { collapsedOutlineIds })
+            onUpdateCourse(course.id, (currentCourse) => createCollapsedOutlineStatePatch(currentCourse, collapsedOutlineIds))
           }
           onHideParentKnowledgePagesChange={(hideParentKnowledgePages) =>
-            onUpdateCourse(course.id, { hideParentKnowledgePages })
+            onUpdateCourse(course.id, createHideParentKnowledgePagesPatch(hideParentKnowledgePages))
           }
           onBranchMindMapChange={(nodeId, mindMap) =>
-            onUpdateCourse(course.id, (currentCourse) => ({
-              branchMindMaps: (() => {
-                const nextBranchMindMaps = { ...(currentCourse.branchMindMaps ?? {}) };
-                if (mindMap) {
-                  nextBranchMindMaps[nodeId] = mindMap;
-                } else {
-                  delete nextBranchMindMaps[nodeId];
-                }
-                return nextBranchMindMaps;
-              })()
-            }))
+            onUpdateCourse(course.id, (currentCourse) => createBranchMindMapStatePatch(currentCourse, nodeId, mindMap))
           }
           onKnowledgeChange={(nodeId, content) =>
-            onUpdateCourse(course.id, (currentCourse) => ({
-              knowledgePoints: {
-                ...(currentCourse.knowledgePoints ?? {}),
-                [nodeId]: content
-              }
-            }))
+            onUpdateCourse(course.id, (currentCourse) => createKnowledgePointStatePatch(currentCourse, nodeId, content))
           }
           onKnowledgeDocumentChange={(nodeId, document) =>
-            onUpdateCourse(course.id, (currentCourse) => ({
-              knowledgeDocuments: {
-                ...(currentCourse.knowledgeDocuments ?? {}),
-                [nodeId]: document
-              }
-            }))
+            onUpdateCourse(course.id, (currentCourse) => createKnowledgeDocumentStatePatch(currentCourse, nodeId, document))
           }
           settings={settings}
         />

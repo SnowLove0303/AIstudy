@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.168",
+    date: "2026-06-15",
+    title: "课程状态写入收口",
+    featureUpdates: ["课程库的目录、分支、知识点和笔记保存入口统一经过状态规则层"],
+    fixes: ["降低单个功能改动绕过底层规则导致目录、缓存或知识内容互相覆盖的风险"],
+    optimizations: ["课程加载、保存和界面更新共享同一套目录快照、折叠和分支缓存校验逻辑"]
+  },
+  {
     version: "1.2.167",
     date: "2026-06-14",
     title: "分支缓存回流保护",

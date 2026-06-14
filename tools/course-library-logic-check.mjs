@@ -23,6 +23,25 @@ const implementationRules = [
     markers: ["knowledgePoints[activePageId]", "knowledgeDocuments[activePageId]"]
   },
   {
+    label: "course state writes are centralized behind state patch helpers",
+    file: "src/domain/courseState.ts",
+    markers: [
+      "export function createMindMapStatePatch",
+      "export function createBranchMindMapStatePatch",
+      "export function createKnowledgePointStatePatch",
+      "export function reconcileCourseState"
+    ]
+  },
+  {
+    label: "course detail writes use centralized state patch helpers",
+    file: "src/main.tsx",
+    markers: [
+      "createMindMapStatePatch(currentCourse, mindMap)",
+      "createBranchMindMapStatePatch(currentCourse, nodeId, mindMap)",
+      "createKnowledgePointStatePatch(currentCourse, nodeId, content)"
+    ]
+  },
+  {
     label: "parent nodes can show a temporary child outline",
     file: "src/main.tsx",
     markers: ["shouldShowAutoBranchOutline", "renderCanvasMindBranchHtml(activeBranchNode)", "isAutoOutline"]
@@ -52,6 +71,15 @@ const implementationRules = [
     file: "src/domain/mindMap.ts",
     markers: ["outlineDirectoryFreezeDepth", "if (item.depth < outlineDirectoryFreezeDepth) return item"]
   }
+];
+
+const forbiddenDirectCoursePatchMarkers = [
+  "onUpdateCourse(course.id, { mindMap })",
+  "onUpdateCourse(course.id, { syncNumberedOutline, numberedOutlineSnapshot })",
+  "onUpdateCourse(course.id, { collapsedOutlineIds })",
+  "onUpdateCourse(course.id, { hideParentKnowledgePages })",
+  "[nodeId]: content",
+  "[nodeId]: document"
 ];
 
 function fail(message) {
@@ -239,6 +267,13 @@ function validateImplementationRules() {
       if (!content.includes(marker)) {
         fail(`Implementation rule is missing: ${rule.label}; marker=${marker}`);
       }
+    }
+  }
+
+  const rendererText = fileCache.get("src/main.tsx") ?? read("src/main.tsx");
+  for (const marker of forbiddenDirectCoursePatchMarkers) {
+    if (rendererText.includes(marker)) {
+      fail(`Renderer bypasses centralized course state patch helpers; marker=${marker}`);
     }
   }
 }

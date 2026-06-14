@@ -1,5 +1,6 @@
 import type { Course } from "./types";
-import { buildOutline, createMindMap, normalizeMindMapData, reconcileBranchMindMaps } from "./mindMap";
+import { buildOutline, createMindMap, normalizeMindMapData } from "./mindMap";
+import { reconcileCourseState } from "./courseState";
 
 export function createCourse(title: string, category: string, description: string, initialBranchTitle = "开篇"): Course {
   return {
@@ -25,17 +26,16 @@ export function normalizeCourses(value: unknown, initialBranchTitle = "开篇"):
   return value.map((course) => {
     const record = course as Course;
     const mindMap = normalizeMindMapData(record.mindMap, record.title, initialBranchTitle);
-    const branchMindMaps = reconcileBranchMindMaps(mindMap, record.branchMindMaps);
-    return {
+    return reconcileCourseState({
       ...record,
       mindMap,
       knowledgePoints: record.knowledgePoints ?? {},
       knowledgeDocuments: record.knowledgeDocuments ?? {},
-      branchMindMaps,
+      branchMindMaps: record.branchMindMaps ?? {},
       syncNumberedOutline: record.syncNumberedOutline ?? true,
       numberedOutlineSnapshot: record.numberedOutlineSnapshot ?? buildOutline(mindMap),
       collapsedOutlineIds: record.collapsedOutlineIds ?? [],
       hideParentKnowledgePages: record.hideParentKnowledgePages ?? false
-    };
+    });
   });
 }
