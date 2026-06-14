@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
 Push-Location $RepoRoot
 try {
@@ -21,6 +21,16 @@ try {
 
     if (-not $Branch) {
         throw 'Current branch could not be determined.'
+    }
+
+    git fetch $Remote $Branch --quiet
+    $remoteRef = "$Remote/$Branch"
+    $remoteExists = git rev-parse --verify --quiet $remoteRef
+    if ($remoteExists) {
+        git merge-base --is-ancestor $remoteRef HEAD
+        if ($LASTEXITCODE -ne 0) {
+            throw "Local '$Branch' is behind or diverged from '$remoteRef'. Run scripts/git/sync.ps1 before pushing."
+        }
     }
 
     $args = @('push')
@@ -42,4 +52,3 @@ try {
 finally {
     Pop-Location
 }
-

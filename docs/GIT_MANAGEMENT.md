@@ -68,6 +68,12 @@ scripts/git/publish.ps1 -Version local-preview -SkipTag
 
 ## Push
 
+If the remote has newer work, sync first:
+
+```powershell
+scripts/git/sync.ps1
+```
+
 Preview a push:
 
 ```powershell
@@ -87,4 +93,4 @@ scripts/git/push.ps1 -IncludeTags
 ```
 
 External push is intentionally separate from commit and publish steps.
-
+The push helper fetches first and refuses to push if local history is behind or diverged.
