@@ -9,6 +9,14 @@ export type UpdateLogEntry = {
 
 export const updateLog: UpdateLogEntry[] = [
   {
+    version: "1.2.171",
+    date: "2026-06-15",
+    title: "分支同步逻辑拆分",
+    featureUpdates: ["分支思维导图继续按当前 nodeId 保存并与主思维导图保持可控同步"],
+    fixes: ["降低分支缓存、父级回写和子分支同步互相影响导致目录关系异常的风险"],
+    optimizations: ["分支保存、缓存新鲜度和同步边界统一收口到课程领域逻辑"]
+  },
+  {
     version: "1.2.170",
     date: "2026-06-15",
     title: "目录面板组件拆分",

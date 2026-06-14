@@ -79,6 +79,25 @@ const implementationRules = [
     ]
   },
   {
+    label: "branch mind-map sync rules are isolated from workspace UI",
+    file: "src/domain/courseBranchSync.ts",
+    markers: [
+      "export function getBranchMindDataForNode",
+      "export function getDescendantBranchMindMapUpdates",
+      "export function getPersistingBranchCanvasId",
+      "export function applyBranchToMainMindMap"
+    ]
+  },
+  {
+    label: "course workspace delegates branch sync decisions",
+    file: "src/main.tsx",
+    markers: [
+      "getBranchMindDataForNode(",
+      "getDescendantBranchMindMapUpdates(",
+      "resolvePersistingBranchCanvasId("
+    ]
+  },
+  {
     label: "parent nodes can show a temporary child outline",
     file: "src/main.tsx",
     markers: ["shouldShowAutoBranchOutline", "renderCanvasMindBranchHtml(activeBranchNode)", "isAutoOutline"]
@@ -90,13 +109,13 @@ const implementationRules = [
   },
   {
     label: "branch mind maps persist only to the active branch root",
-    file: "src/main.tsx",
-    markers: ["activeBranchId && activeBranchId === canvasRootId", "persistBranchCanvasData(branchCanvasId, nextData, options)"]
+    file: "src/domain/courseBranchSync.ts",
+    markers: ["activeBranchCanvasId && activeBranchCanvasId === canvasRootId", "canvasRootId !== mainMindMap.nodeData.id"]
   },
   {
     label: "stale branch caches are rejected before reuse",
-    file: "src/main.tsx",
-    markers: ["isBranchMindMapFresh(mainMindDataRef.current, nodeId, storedBranch)", "pruneStaleBranchMindMaps(nextData)"]
+    file: "src/domain/courseBranchSync.ts",
+    markers: ["isBranchMindMapFresh(mainMindMap, nodeId, storedBranch)", "staleBranchId: nodeId"]
   },
   {
     label: "manual outline collapse has priority over auto focus",
@@ -425,10 +444,10 @@ async function compareMysqlIfAvailable(localCourses) {
 async function main() {
   const rendererText = read("src/main.tsx");
   const mindMapText = read("src/domain/mindMap.ts");
+  const branchSyncText = read("src/domain/courseBranchSync.ts");
   validateImplementationRules();
 
   const requiredRendererMarkers = [
-    ["branch root guard", "activeBranchId && activeBranchId === canvasRootId"],
     ["manual collapse guard", "manualCollapseGuardRef"],
     ["auto outline flag", "isAutoOutline"],
     ["auto outline machine marker", generatedBranchMarker],
@@ -440,6 +459,9 @@ async function main() {
 
   if (!mindMapText.includes("if (item.depth < outlineDirectoryFreezeDepth) return item")) {
     fail("Frozen outline snapshot must not override parent/depth for non-frozen levels.");
+  }
+  if (!branchSyncText.includes("activeBranchCanvasId && activeBranchCanvasId === canvasRootId")) {
+    fail("Branch sync logic must keep edits bound to the active branch root.");
   }
   if (mindMapText.includes("topic: frozenItem.topic")) {
     fail("Frozen outline snapshot must not freeze node titles; existing titles must follow mind map edits.");
