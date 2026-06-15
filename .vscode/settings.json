@@ -1,7 +1,0 @@
-{
-  "dotnet.server.path": "F:\\AIAPP\\Codex\\.dotnet\\sdk9\\dotnet.exe",
-  "files.exclude": {
-    "**/bin": true,
-    "**/obj": true
-  }
-}

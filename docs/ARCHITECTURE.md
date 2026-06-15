@@ -1,152 +1,223 @@
-# AI-Study Architecture
+# AIstudy Architecture Baseline
 
 ## Decision
 
-AI-Study is a local-first personal Windows desktop application.
+Use an Electron application with a React renderer and TypeScript domain layer.
 
-Use:
+The previous WinUI/WebView2 experiment is removed. The new baseline follows the existing implementation direction already present in the remote project history:
 
-- C# / .NET 10 LTS for the native host, domain layer, persistence, file IO, and system integration.
-- WinUI 3 for the Windows shell.
-- WebView2 for embedded editor surfaces.
-- TypeScript + React for the two heavy editors.
-- MySQL for structured metadata, search indexes, versions, and relational queries.
-- A local content-addressed blob store for large files and binary payloads.
+- `mind-elixir` owns mind-map rendering and editing.
+- `@hufe921/canvas-editor` owns Word-like WYSIWYG knowledge documents.
+- Electron main process owns OS integration, file access, MySQL access, backup, export, and update flow.
+- React renderer owns UI composition and editor mounting.
+- Domain modules own all course, node, branch, document, and persistence rules.
 
-Do not build the Word-like editor or mind-map canvas directly with native WinUI controls. Their editing complexity belongs in a browser-grade editing runtime hosted inside WebView2.
+## Non-Negotiable Boundaries
 
-## Reference Patterns
+Do not hand-roll a mind-map canvas.
 
-Observed open-source patterns:
+Do not copy editor behavior into native code.
 
-- CardMirror keeps a ProseMirror schema, importer, exporter, commands, plugins, and editor as one tightly coordinated core for Word-compatible document editing.
-- draw.io Desktop wraps a mature web editor in a desktop shell and aggressively isolates network access.
-- SimpleMindMap provides a complete browser mind-map canvas with XMind-style editing and import/export support.
-- React Flow mind-map examples remain useful references for custom graph interactions, but not the v1 XMind-style editor foundation.
-- AFFiNE and tldraw show the value of block/canvas engines with explicit stores and extensibility points.
+Do not store large Word/editor content directly inside mind-map node records.
 
-AI-Study follows the same broad pattern: native system host, web editor runtimes, shared domain contracts, narrow bridges.
+Do not let renderer components directly write MySQL.
 
-## High-Level Shape
+Do not make one large course JSON blob the only source of truth once MySQL persistence is enabled.
+
+## Process Layout
 
 ```text
-AIStudy.App                 WinUI 3 EXE shell
-AIStudy.Core                domain models and invariants
-AIStudy.Application         use cases and orchestration
-AIStudy.Infrastructure      MySQL, blob store, OpenXML, XMind IO
-AIStudy.EditorBridge        typed WebView2 message protocol
+Electron main
+  - window lifecycle
+  - app paths
+  - MySQL connection
+  - local asset storage
+  - import/export
+  - backup/restore
+  - IPC command handlers
 
-web/editors/word            Tiptap / ProseMirror document editor
-web/editors/mindmap         SimpleMindMap mind-map canvas
-web/shared                  editor protocol types and shared UI primitives
-scripts                     build, migration, and maintenance scripts
-docs                        architecture decisions and budgets
+React renderer
+  - left navigation
+  - course list
+  - mind-map workspace
+  - document workspace
+  - toolbar UI
+  - no direct database access
+
+Domain layer
+  - course normalization
+  - mind-map node indexing
+  - branch-map reconciliation
+  - document-node linking
+  - snapshot compaction policy
+
+Editor libraries
+  - mind-elixir for xmind-like canvas
+  - canvas-editor for Word-like documents
 ```
 
-## Runtime Boundaries
+## Core Data Ownership
 
-The native host owns:
+Course is the top-level personal knowledge container.
 
-- project lifecycle
-- file open/save/export
-- MySQL access
-- blob storage
-- trust boundaries and permissions
-- autosave scheduling
-- crash recovery
-- long-running import/export jobs
+Mind-map node id is the stable key that connects all future features:
 
-The embedded web editors own:
+- outline entry
+- branch mind map
+- Word-like detail document
+- assets
+- review cards
+- AI summaries
+- export sections
 
-- cursor, selection, keyboard behavior
-- drag/drop interactions
-- local undo/redo inside the active editor
-- rendering of document/canvas state
-- command surface state such as toolbar enabled/disabled flags
+Changing a node title must not change its id.
 
-The bridge owns:
+Deleting a node must soft-delete related projections first, then let cleanup jobs remove orphan snapshots and assets later.
 
-- typed commands from native to editor
-- typed events from editor to native
-- request/response correlation IDs
-- throttling and batching
-- schema version checks
-
-The database never becomes the editor runtime. It stores durable normalized state, snapshots, indexes, and references.
-
-## Main Data Model
-
-Use stable IDs everywhere. Never rely on display text or array position as identity.
-
-Core entities:
-
-- Workspace
-- Project
-- Document
-- MindMap
-- EditorSnapshot
-- ChangeEvent
-- Asset
-- BlobRef
-- SearchIndexEntry
-
-Document editor native format:
-
-- ProseMirror-compatible JSON envelope.
-- Compressed snapshots.
-- Incremental change events between snapshots.
-- DOCX import/export adapters around the native format.
-
-Mind-map native format:
-
-- Graph/tree envelope with nodes, edges, layout hints, collapsed state, and metadata.
-- Compressed snapshots.
-- Incremental change events between snapshots.
-- XMind import/export adapters around the native format.
-
-## Storage Policy
-
-MySQL stores:
-
-- entity metadata
-- current snapshot pointers
-- version metadata
-- search text and lightweight indexes
-- node/block relational projections used by the app
-- blob references by hash
-
-Blob store stores:
-
-- original DOCX/XMind files
-- imported images and attachments
-- generated preview thumbnails
-- compressed snapshot payloads when too large for relational rows
-- export artifacts with cache expiry
-
-Blob keys use SHA-256 content addressing:
+## MySQL Tables
 
 ```text
-data/blobs/sha256/ab/cd/<full-hash>
+courses
+  id
+  name
+  sort_order
+  created_at
+  updated_at
+  deleted_at
+
+mind_maps
+  id
+  course_id
+  root_node_id
+  current_snapshot_id
+  created_at
+  updated_at
+  deleted_at
+
+mind_map_snapshots
+  id
+  mind_map_id
+  sequence_no
+  payload_json
+  byte_size
+  created_at
+
+mind_map_nodes
+  id
+  course_id
+  mind_map_id
+  parent_node_id
+  title
+  depth
+  position_index
+  is_collapsed
+  updated_at
+  deleted_at
+
+knowledge_documents
+  id
+  course_id
+  mind_map_id
+  node_id
+  current_snapshot_id
+  current_byte_size
+  title
+  created_at
+  updated_at
+  deleted_at
+
+knowledge_document_snapshots
+  id
+  document_id
+  sequence_no
+  payload_json
+  byte_size
+  created_at
+
+assets
+  id
+  sha256
+  local_path
+  mime_type
+  byte_size
+  created_at
+
+knowledge_asset_links
+  id
+  course_id
+  node_id
+  document_id
+  asset_id
+  relation_type
+  created_at
 ```
 
-This prevents repeated imports, repeated images, and repeated export artifacts from inflating storage.
+## Snapshot Policy
 
-## Packaging
+Mind map:
 
-Start as an unpackaged WinUI 3 desktop app for fast local build/run loops and direct EXE launch.
+- Store full `MindElixirData` snapshots.
+- Store flat `mind_map_nodes` projection for search, tree navigation, and document binding.
+- Keep recent snapshots.
+- Compact old snapshots by time and count.
 
-Keep the design compatible with future packaged deployment by isolating:
+Word-like documents:
 
-- app data paths
-- runtime prerequisites
-- file associations
-- update logic
+- Store full `canvas-editor` document snapshots separately from mind-map data.
+- Keep one current pointer per node document.
+- Use `(course_id, mind_map_id, node_id)` as the only binding key between Word detail documents and mind-map nodes.
+- Load the active node document on demand only; never load all documents for a course when opening the course.
+- Enforce snapshot size budgets before writing: mind map snapshots stay below 5MB, Word detail snapshots stay below 2MB.
+- Store images and attachments in `assets`, not inside JSON payloads.
+- Hash assets by SHA-256 to avoid duplicates.
 
-## Architecture Rules
+## Memory Policy
 
-- Keep editor-specific complexity out of the native shell.
-- Keep database code out of editor WebView code.
-- Keep DOCX/XMind compatibility code behind import/export adapters.
-- Keep all cross-boundary messages typed and versioned.
-- Keep native and web state synchronized through explicit commands/events, not shared mutable objects.
-- Treat the browser editor as untrusted relative to the filesystem; file access goes through the native host.
+Only mount active editors.
+
+When switching courses:
+
+- dispose current mind-map instance
+- dispose current document editor instance
+- keep only current course metadata and selected document in renderer memory
+- reload large snapshots on demand through IPC
+
+When switching nodes:
+
+- save pending document changes
+- unload previous document editor state
+- load target node document snapshot only when opened
+
+## Feature Isolation
+
+Mind-map editing must produce only:
+
+- full mind-map snapshot
+- node projection update
+- node lifecycle events
+
+Document editing must produce only:
+
+- document snapshot
+- asset link updates
+- document metadata update
+
+Course management must not know editor internals.
+
+Export must read domain models through services, not scrape UI state.
+
+Renderer feature code must keep application shell state, feature UI state, editor adapters, domain model rules, and persistence services separated. The detailed implementation constraint is maintained in `docs/功能规划/底层架构分层约束.md`.
+
+Word detail storage has its own implementation constraint in `docs/功能规划/Word详细内容存储约束.md`. That contract is stricter than the early architecture sketch: Word content belongs to `knowledge_document_snapshots`, while `knowledge_documents` is only the node-level current pointer and strong index.
+
+## First Implementation Milestone
+
+1. Scaffold Electron + React + TypeScript + Vite.
+2. Add empty shell UI with narrow left navigation.
+3. Add MySQL connection and migrations.
+4. Add course CRUD.
+5. Embed `mind-elixir` exactly as the mind-map canvas.
+6. Persist `MindElixirData` and `mind_map_nodes`.
+7. Verify create child, edit title, save, close, reopen, restore.
+
+Word editor comes after the mind-map persistence contract is stable.

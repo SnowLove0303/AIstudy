@@ -1,0 +1,78 @@
+{
+  "name": "aistudy",
+  "version": "0.1.0",
+  "description": "AIstudy desktop shell.",
+  "author": "SnowLove0303",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SnowLove0303/AIstudy.git"
+  },
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "tsc && vite build && node scripts/build/prepare-renderer-vendors.mjs && tsc -p tsconfig.electron.json",
+    "pack": "npm run build && electron-builder --dir --config.electronDist=node_modules/electron/dist",
+    "dist": "npm run build && electron-builder --win nsis --config.electronDist=node_modules/electron/dist",
+    "dist:oneclick": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package/close-and-dist.ps1",
+    "update:record": "node scripts/update/record-update.mjs"
+  },
+  "dependencies": {
+    "mysql2": "^3.22.5"
+  },
+  "devDependencies": {
+    "@hufe921/canvas-editor": "^0.9.135",
+    "@types/node": "^24.10.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
+    "lucide-react": "^0.561.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "simple-mind-map": "^0.14.0-fix.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.16",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.snowlove0303.aistudy",
+    "productName": "AIstudy",
+    "executableName": "AIstudy",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "AIstudy"
+    }
+  }
+}
