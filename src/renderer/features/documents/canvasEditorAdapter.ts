@@ -5,10 +5,12 @@ import type {
   KnowledgeDocumentFormatState,
   KnowledgeDocumentSnapshot
 } from "./knowledgeDocumentTypes";
+import { AISTUDY_CORE_CONTRACT } from "../../domain/coreContracts";
 
 const DOCUMENT_EDITOR_VERSION = "canvas-editor@0.9.135";
 const DEFAULT_FONT_SIZE = 16;
 const DEFAULT_COLOR = "#1f2937";
+const DOCUMENT_EDITOR = AISTUDY_CORE_CONTRACT.editors.knowledgeDocument;
 const LANDSCAPE_PAGE_RATIO = 794 / 1123;
 const DOCUMENT_PAGE_GUTTER = 32;
 const MIN_LANDSCAPE_PAGE_WIDTH = 960;
@@ -53,7 +55,7 @@ function normalizeSnapshot(value: unknown): KnowledgeDocumentSnapshot {
     const candidate = value as Partial<KnowledgeDocumentSnapshot>;
     return {
       schemaVersion: 1,
-      editor: "aistudy-word",
+      editor: DOCUMENT_EDITOR,
       editorVersion: typeof candidate.editorVersion === "string" ? candidate.editorVersion : DOCUMENT_EDITOR_VERSION,
       content: normalizeEditorData(candidate.content as KnowledgeDocumentContent | undefined) as KnowledgeDocumentContent,
       updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : new Date().toISOString()
@@ -66,7 +68,7 @@ function normalizeSnapshot(value: unknown): KnowledgeDocumentSnapshot {
 export function createEmptyKnowledgeDocumentSnapshot(): KnowledgeDocumentSnapshot {
   return {
     schemaVersion: 1,
-    editor: "aistudy-word",
+    editor: DOCUMENT_EDITOR,
     editorVersion: DOCUMENT_EDITOR_VERSION,
     content: {
       main: [{ value: "" }]
@@ -79,7 +81,7 @@ function toSnapshot(editor: CanvasEditorInstance): KnowledgeDocumentSnapshot {
   const value = editor.command.getValue();
   return {
     schemaVersion: 1,
-    editor: "aistudy-word",
+    editor: DOCUMENT_EDITOR,
     editorVersion: DOCUMENT_EDITOR_VERSION,
     content: normalizeEditorData(value.data) as KnowledgeDocumentContent,
     updatedAt: new Date().toISOString()

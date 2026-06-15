@@ -1,12 +1,13 @@
+import { AISTUDY_CORE_CONTRACT } from "../../domain/coreContracts";
 import type { MindMapLayoutType, MindMapOutlineItem, MindMapSnapshot, SimpleMindMapNode } from "./mindMapTypes";
 
 const EDITOR_VERSION = "0.14.0-fix.2";
-export const RIGHT_BRANCH_LAYOUT: MindMapLayoutType = "logicalStructure";
-export const MIND_MAP_DEFAULT_FONT_SIZE = 20;
+export const RIGHT_BRANCH_LAYOUT: MindMapLayoutType = AISTUDY_CORE_CONTRACT.mindMap.defaultLayout;
+export const MIND_MAP_DEFAULT_FONT_SIZE = AISTUDY_CORE_CONTRACT.mindMap.defaultFontSize;
 const DEFAULT_THEME = "default";
 const MIND_MAP_FONT_FAMILY = '"Microsoft YaHei", "微软雅黑", Arial, sans-serif';
 const UNTITLED_NODE_TITLE = "未命名";
-const NODE_ID_PREFIX = "aistudy-node-";
+const NODE_ID_PREFIX = AISTUDY_CORE_CONTRACT.mindMap.nodeIdPrefix;
 
 export const MIND_MAP_CATALOG_RELATION = Object.freeze({
   source: "mindmap",
@@ -139,8 +140,8 @@ export function createRootNode(title: string): SimpleMindMapNode {
 
 export function createInitialSnapshot(title: string): MindMapSnapshot {
   return {
-    schemaVersion: 1,
-    editor: "simple-mind-map",
+    schemaVersion: AISTUDY_CORE_CONTRACT.schemaVersion,
+    editor: AISTUDY_CORE_CONTRACT.editors.mindMap,
     editorVersion: EDITOR_VERSION,
     root: createRootNode(title),
     layout: RIGHT_BRANCH_LAYOUT,
@@ -155,14 +156,18 @@ export function normalizeSnapshot(value: unknown, fallbackTitle: string): MindMa
   }
 
   const candidate = value as Partial<MindMapSnapshot>;
-  if (candidate.schemaVersion !== 1 || candidate.editor !== "simple-mind-map" || !candidate.root) {
+  if (
+    candidate.schemaVersion !== AISTUDY_CORE_CONTRACT.schemaVersion ||
+    candidate.editor !== AISTUDY_CORE_CONTRACT.editors.mindMap ||
+    !candidate.root
+  ) {
     return createInitialSnapshot(fallbackTitle);
   }
   const sourceLayout = normalizeLayout(candidate.layout);
 
   return {
-    schemaVersion: 1,
-    editor: "simple-mind-map",
+    schemaVersion: AISTUDY_CORE_CONTRACT.schemaVersion,
+    editor: AISTUDY_CORE_CONTRACT.editors.mindMap,
     editorVersion: typeof candidate.editorVersion === "string" ? candidate.editorVersion : EDITOR_VERSION,
     root: normalizeMindMapTree(candidate.root, fallbackTitle),
     layout: sourceLayout,

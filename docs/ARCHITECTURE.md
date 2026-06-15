@@ -6,7 +6,7 @@ Use an Electron application with a React renderer and TypeScript domain layer.
 
 The previous WinUI/WebView2 experiment is removed. The new baseline follows the existing implementation direction already present in the remote project history:
 
-- `mind-elixir` owns mind-map rendering and editing.
+- `simple-mind-map` owns mind-map rendering and editing.
 - `@hufe921/canvas-editor` owns Word-like WYSIWYG knowledge documents.
 - Electron main process owns OS integration, file access, MySQL access, backup, export, and update flow.
 - React renderer owns UI composition and editor mounting.
@@ -52,7 +52,7 @@ Domain layer
   - snapshot compaction policy
 
 Editor libraries
-  - mind-elixir for xmind-like canvas
+  - simple-mind-map for xmind-like canvas
   - canvas-editor for Word-like documents
 ```
 
@@ -156,7 +156,7 @@ knowledge_asset_links
 
 Mind map:
 
-- Store full `MindElixirData` snapshots.
+- Store full `simple-mind-map` snapshots.
 - Store flat `mind_map_nodes` projection for search, tree navigation, and document binding.
 - Keep recent snapshots.
 - Compact old snapshots by time and count.
@@ -167,7 +167,7 @@ Word-like documents:
 - Keep one current pointer per node document.
 - Use `(course_id, mind_map_id, node_id)` as the only binding key between Word detail documents and mind-map nodes.
 - Load the active node document on demand only; never load all documents for a course when opening the course.
-- Enforce snapshot size budgets before writing: mind map snapshots stay below 5MB, Word detail snapshots stay below 2MB.
+- Track snapshot byte sizes and prevent growth through hash reuse, snapshot retention, and asset extraction rather than renderer memory limits.
 - Store images and attachments in `assets`, not inside JSON payloads.
 - Hash assets by SHA-256 to avoid duplicates.
 
@@ -216,8 +216,8 @@ Word detail storage has its own implementation constraint in `docs/功能规划/
 2. Add empty shell UI with narrow left navigation.
 3. Add MySQL connection and migrations.
 4. Add course CRUD.
-5. Embed `mind-elixir` exactly as the mind-map canvas.
-6. Persist `MindElixirData` and `mind_map_nodes`.
+5. Embed `simple-mind-map` exactly as the mind-map canvas.
+6. Persist `simple-mind-map` snapshots and `mind_map_nodes`.
 7. Verify create child, edit title, save, close, reopen, restore.
 
 Word editor comes after the mind-map persistence contract is stable.

@@ -8,12 +8,13 @@ import { Socket } from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { AISTUDY_CORE_CONTRACT } from "./coreContract.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const execFileAsync = promisify(execFile);
-const MIND_MAP_SNAPSHOT_RETENTION_LIMIT = 12;
-const KNOWLEDGE_DOCUMENT_SNAPSHOT_RETENTION_LIMIT = 16;
+const MIND_MAP_SNAPSHOT_RETENTION_LIMIT = AISTUDY_CORE_CONTRACT.mindMap.snapshotRetentionLimit;
+const KNOWLEDGE_DOCUMENT_SNAPSHOT_RETENTION_LIMIT = AISTUDY_CORE_CONTRACT.knowledgeDocument.snapshotRetentionLimit;
 const BEFORE_CLOSE_DRAIN_TIMEOUT_MS = 2500;
 
 type CourseRecord = {
@@ -1826,7 +1827,11 @@ function getNonEmptyString(value: unknown, fallback = "") {
 
 function normalizeId(value: unknown, label: string, fallback?: string) {
   const text = getNonEmptyString(value, fallback);
-  if (!text || text.length > 64 || !/^[A-Za-z0-9:_-]+$/.test(text)) {
+  if (
+    !text ||
+    text.length > AISTUDY_CORE_CONTRACT.identity.entityIdMaxLength ||
+    !AISTUDY_CORE_CONTRACT.identity.pattern.test(text)
+  ) {
     throw new Error(`${label} is invalid.`);
   }
   return text;
@@ -1834,7 +1839,11 @@ function normalizeId(value: unknown, label: string, fallback?: string) {
 
 function normalizeNodeScopedId(value: unknown, label: string) {
   const text = getNonEmptyString(value);
-  if (!text || text.length > 96 || !/^[A-Za-z0-9:_-]+$/.test(text)) {
+  if (
+    !text ||
+    text.length > AISTUDY_CORE_CONTRACT.identity.nodeIdMaxLength ||
+    !AISTUDY_CORE_CONTRACT.identity.pattern.test(text)
+  ) {
     throw new Error(`${label} is invalid.`);
   }
   return text;
@@ -1866,16 +1875,16 @@ function normalizeMindMapSnapshot(value: unknown): MindMapSnapshot {
     throw new Error("Mind map snapshot root is missing.");
   }
 
-  if (value.schemaVersion !== 1 || value.editor !== "simple-mind-map") {
+  if (value.schemaVersion !== AISTUDY_CORE_CONTRACT.schemaVersion || value.editor !== AISTUDY_CORE_CONTRACT.editors.mindMap) {
     throw new Error("Unsupported mind map snapshot format.");
   }
 
   return {
-    schemaVersion: 1,
-    editor: "simple-mind-map",
+    schemaVersion: AISTUDY_CORE_CONTRACT.schemaVersion,
+    editor: AISTUDY_CORE_CONTRACT.editors.mindMap,
     editorVersion: getNonEmptyString(value.editorVersion, "unknown"),
     root,
-    layout: getNonEmptyString(value.layout, "mindMap"),
+    layout: getNonEmptyString(value.layout, AISTUDY_CORE_CONTRACT.mindMap.defaultLayout),
     theme: value.theme,
     view: value.view,
     updatedAt: getNonEmptyString(value.updatedAt, new Date().toISOString())
@@ -2228,13 +2237,16 @@ function normalizeKnowledgeDocumentSnapshot(value: unknown): KnowledgeDocumentSn
     throw new Error("Knowledge document snapshot must be an object.");
   }
 
-  if (value.schemaVersion !== 1 || value.editor !== "aistudy-word") {
+  if (
+    value.schemaVersion !== AISTUDY_CORE_CONTRACT.schemaVersion ||
+    value.editor !== AISTUDY_CORE_CONTRACT.editors.knowledgeDocument
+  ) {
     throw new Error("Unsupported knowledge document snapshot format.");
   }
 
   return {
-    schemaVersion: 1,
-    editor: "aistudy-word",
+    schemaVersion: AISTUDY_CORE_CONTRACT.schemaVersion,
+    editor: AISTUDY_CORE_CONTRACT.editors.knowledgeDocument,
     editorVersion: getNonEmptyString(value.editorVersion, "unknown"),
     content: value.content ?? null,
     updatedAt: getNonEmptyString(value.updatedAt, new Date().toISOString())

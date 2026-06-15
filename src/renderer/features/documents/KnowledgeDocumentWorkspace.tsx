@@ -2,6 +2,7 @@ import React from "react";
 import { Bold, Bot, Italic, Redo2, Save, Type, Underline, Undo2 } from "lucide-react";
 import { createCanvasDocumentEditor, createEmptyKnowledgeDocumentSnapshot } from "./canvasEditorAdapter";
 import { AiAssistantPanel } from "../assistant/AiAssistantPanel";
+import { createKnowledgeDocumentBinding } from "../../domain/coreContracts";
 import { registerBeforeCloseSave } from "../../lib/saveDrain";
 import { readLocalSnapshot, writeLocalSnapshot } from "../../lib/localSnapshotStore";
 import {
@@ -181,7 +182,11 @@ export function KnowledgeDocumentWorkspace({ courseId, mindMapId, selectedNode }
   const [assistantDraft, setAssistantDraft] = React.useState("");
   const [aiContextMenu, setAiContextMenu] = React.useState<AiContextMenuState | null>(null);
 
-  const canUseDocument = Boolean(courseId && mindMapId && selectedNode.id && snapshot);
+  const documentBinding = React.useMemo(
+    () => createKnowledgeDocumentBinding(courseId, mindMapId, selectedNode.id),
+    [courseId, mindMapId, selectedNode.id]
+  );
+  const canUseDocument = Boolean(documentBinding && snapshot);
 
   const updateDocumentViewportState = React.useCallback(() => {
     const mount = mountRef.current;
@@ -279,12 +284,10 @@ export function KnowledgeDocumentWorkspace({ courseId, mindMapId, selectedNode }
 
   const queueSnapshotSave = React.useCallback(
     (nextSnapshot: KnowledgeDocumentSnapshot) => {
-      if (!courseId || !mindMapId || !selectedNode.id) return;
+      if (!documentBinding) return;
       latestSnapshotRef.current = nextSnapshot;
       pendingSaveRef.current = {
-        courseId,
-        mindMapId,
-        nodeId: selectedNode.id,
+        ...documentBinding,
         title: selectedNode.title || "未命名",
         snapshot: nextSnapshot
       };
@@ -293,7 +296,7 @@ export function KnowledgeDocumentWorkspace({ courseId, mindMapId, selectedNode }
       }
       saveTimerRef.current = window.setTimeout(() => flushPendingSave(false), SAVE_DEBOUNCE_MS);
     },
-    [courseId, flushPendingSave, mindMapId, selectedNode.id, selectedNode.title]
+    [documentBinding, flushPendingSave, selectedNode.title]
   );
 
   React.useEffect(() => {
@@ -311,18 +314,18 @@ export function KnowledgeDocumentWorkspace({ courseId, mindMapId, selectedNode }
     const sequence = loadSequenceRef.current + 1;
     loadSequenceRef.current = sequence;
 
-    const nodeId = selectedNode.id;
-    if (!courseId || !mindMapId || !nodeId) {
+    if (!documentBinding) {
       setIsLoading(false);
       setStorageMode("none");
       return;
     }
 
     setIsLoading(true);
-    const request: LoadRequest = { courseId, mindMapId, nodeId };
+    const request: LoadRequest = documentBinding;
     void (async () => {
       const fallbackSnapshot =
-        (await loadLocalDocument(courseId, mindMapId, nodeId)) ?? createEmptyKnowledgeDocumentSnapshot();
+        (await loadLocalDocument(documentBinding.courseId, documentBinding.mindMapId, documentBinding.nodeId)) ??
+        createEmptyKnowledgeDocumentSnapshot();
       if (loadSequenceRef.current !== sequence) return;
 
       if (!window.aistudyKnowledgeDocuments) {
@@ -352,7 +355,7 @@ export function KnowledgeDocumentWorkspace({ courseId, mindMapId, selectedNode }
         }
       }
     })();
-  }, [courseId, flushPendingSave, mindMapId, resetDocumentViewportToStart, selectedNode.id]);
+  }, [documentBinding, flushPendingSave, resetDocumentViewportToStart]);
 
   React.useEffect(() => {
     const mount = mountRef.current;
@@ -488,19 +491,17 @@ export function KnowledgeDocumentWorkspace({ courseId, mindMapId, selectedNode }
   React.useEffect(() => registerBeforeCloseSave(() => flushPendingSave(true)), [flushPendingSave]);
 
   const saveNow = React.useCallback(() => {
-    if (!courseId || !mindMapId || !selectedNode.id) return Promise.resolve(null);
+    if (!documentBinding) return Promise.resolve(null);
     const nextSnapshot = editorRef.current?.getSnapshot() ?? latestSnapshotRef.current ?? snapshot;
     if (!nextSnapshot) return Promise.resolve(null);
     latestSnapshotRef.current = nextSnapshot;
     pendingSaveRef.current = {
-      courseId,
-      mindMapId,
-      nodeId: selectedNode.id,
+      ...documentBinding,
       title: selectedNode.title || "未命名",
       snapshot: nextSnapshot
     };
     return flushPendingSave(false);
-  }, [courseId, flushPendingSave, mindMapId, selectedNode.id, selectedNode.title, snapshot]);
+  }, [documentBinding, flushPendingSave, selectedNode.title, snapshot]);
 
   const storageText = storageMode === "mysql" ? "已连接" : storageMode === "local" ? "本地副本" : "未保存";
 
